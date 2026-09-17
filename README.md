@@ -29,6 +29,16 @@ solo en el navegador donde se cargó (no forma parte de esta web).
    recuerda para las siguientes (se puede cambiar con **Cambiar sello**).
 4. Elige **3 documentos separados** o **Pack único** y pulsa **Descargar**. Para bajar solo
    una hoja, pincha sobre ella en la vista previa.
+5. En **DOCUS ESPECIALES PLATAFORMAS**, a la derecha, cada botón descarga el documento
+   que pide esa plataforma ya relleno con el nombre, el DNI, la fecha de hoy y la firma
+   del trabajador.
+
+### Añadir un documento especial
+
+1. Copia su plantilla en `plantillas/`.
+2. Añade su ficha en `js/especiales.js`: texto del botón, archivo, página que se rellena y
+   dónde va cada dato (coordenadas de MuPDF, con la "y" en la línea base del texto, y el
+   ancho del hueco para que el texto se encoja si no cabe).
 
 ## Desarrollo
 

@@ -7,10 +7,11 @@ import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 
+import { ESPECIALES, generar } from "../js/especiales.js";
 import { fechaDeHoy } from "../js/fecha.js";
 import { deHojaSuelta, desdeImagen, desdePdf } from "../js/firma.js";
 import { ErrorProcesado, FirmaNoEncontrada, firmante, procesar } from "../js/pdf.js";
-import { abrirPdf, guardar, mupdf } from "../js/pdfutil.js";
+import { abrirPdf, guardar, lineasDeTexto, mupdf } from "../js/pdfutil.js";
 
 const EJEMPLOS = process.env.FIRMADOR_EJEMPLOS ?? path.join(os.homedir(), "DOCUMENTOS DE EJEMPLO");
 const existe = (nombre) => fs.existsSync(path.join(EJEMPLOS, nombre));
@@ -58,11 +59,11 @@ function imagenes(bytes, indice = 0) {
   return lista;
 }
 
-function llevaImagen(bytes, png) {
+function llevaImagen(bytes, png, indice = 0) {
   const esperada = new mupdf.Image(png).toPixmap();
   // Copia: getPixels() apunta a la memoria de MuPDF y deja de valer si esta crece al leer más imágenes.
   const pixeles = esperada.getPixels().slice();
-  return imagenes(bytes).some((im) => im.ancho === esperada.getWidth() && im.alto === esperada.getHeight() &&
+  return imagenes(bytes, indice).some((im) => im.ancho === esperada.getWidth() && im.alto === esperada.getHeight() &&
     im.pixeles.length === pixeles.length && im.pixeles.every((v, i) => v === pixeles[i]));
 }
 
@@ -181,6 +182,38 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     blanco.clear(255);
     assert.throws(() => desdeImagen(blanco.asPNG(), "x"), /en blanco/);
     assert.throws(() => desdeImagen(new TextEncoder().encode("no es una imagen"), "x"), ErrorProcesado);
+  });
+
+  test("documento especial de IESE MADRID relleno", () => {
+    const especial = ESPECIALES.find((e) => e.id === "iese-madrid");
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
+    const resultado = procesar(leer(DOCS["51143385X"].archivo), { sello: SELLO });
+    const datos = {
+      trabajador: resultado.trabajador,
+      dni: resultado.dni,
+      puesto: resultado.puesto,
+      firma: resultado.firma,
+      fecha: new Date(2026, 8, 17),
+    };
+    assert.equal(datos.puesto.length > 0, true, "se lee el puesto del documento laboral");
+    assert.equal(especial.archivo(datos), `DOCU ESPECIAL IESE MADRID - ${resultado.trabajador}.pdf`);
+
+    const pdf = generar(especial, plantilla, datos);
+    const doc = new mupdf.PDFDocument(pdf);
+    assert.equal(doc.countPages(), 8);
+    const ultima = doc.countPages() - 1;
+    const texto = doc.loadPage(ultima).toStructuredText("preserve-whitespace").asText().replace(/\s+/g, " ");
+    for (const esperado of [resultado.trabajador, resultado.dni, "17", "SEPTIEMBRE", "26"]) {
+      assert.ok(texto.includes(esperado), `falta "${esperado}" en el documento especial`);
+    }
+    assert.ok(llevaImagen(pdf, datos.firma, ultima), "lleva la firma del trabajador");
+
+    // Un nombre muy largo se encoge para no salirse de su hueco
+    const largo = generar(especial, plantilla, { ...datos, trabajador: "MARIA DEL CARMEN FERNANDEZ DE LA HOZ ECHEVARRIA" });
+    const lineas = lineasDeTexto(new mupdf.PDFDocument(largo).loadPage(ultima));
+    const linea = lineas.find((l) => l.chars.map((c) => c.c).join("").includes("MARIA DEL CARMEN"));
+    assert.ok(linea, "el nombre largo está en el documento");
+    assert.ok(linea.bbox[2] - linea.bbox[0] <= 200, `el nombre largo cabe (mide ${(linea.bbox[2] - linea.bbox[0]).toFixed(0)} pt)`);
   });
 
   test("formato de la fecha de hoy", () => {

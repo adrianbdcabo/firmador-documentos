@@ -1,5 +1,6 @@
 // Interfaz: cargar el documento laboral (y, si hace falta, la firma y el sello), previsualizar y descargar.
 
+import { ESPECIALES, generar } from "./especiales.js";
 import { fechaDeHoy } from "./fecha.js";
 import * as firmas from "./firma.js";
 import { ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
@@ -123,6 +124,7 @@ async function procesarDocumento() {
 
   estado.resultado = resultado;
   $("interruptor-sello").hidden = false;
+  $("especiales").hidden = false;
   mostrarPrevias();
   $("btn-descargar").disabled = false;
   ponerEstado(TEXTOS.listo);
@@ -138,7 +140,8 @@ function limpiar() {
   $("pila").hidden = true;
   $("pila").replaceChildren();
   mostrarZona(TEXTOS.zonaTitulo, TEXTOS.zonaSubtitulo, () => $("input-documento").click());
-  $("interruptor-sello").hidden = true; // aparece una vez generadas las hojas
+  $("interruptor-sello").hidden = true; // aparecen una vez generadas las hojas
+  $("especiales").hidden = true;
   $("btn-descargar").disabled = true;
   actualizarDatos();
   ponerEstado("");
@@ -418,6 +421,53 @@ function descargarTodo() {
   else descargar(resultado.hojas.map((hoja) => [`${hoja.clave} - ${resultado.trabajador}.pdf`, hoja.pdf]));
 }
 
+// Documentos especiales de plataformas
+
+const plantillas = new Map();
+
+async function plantillaDe(ruta) {
+  if (!plantillas.has(ruta)) {
+    const respuesta = await fetch(new URL(ruta, location.href));
+    if (!respuesta.ok) throw new Error(`no se ha podido descargar la plantilla (${respuesta.status})`);
+    plantillas.set(ruta, new Uint8Array(await respuesta.arrayBuffer()));
+  }
+  return plantillas.get(ruta);
+}
+
+async function descargarEspecial(especial) {
+  const { resultado } = estado;
+  if (!resultado) return;
+  ponerEstado(`Preparando ${especial.boton}…`);
+  await pausa();
+  const datos = {
+    trabajador: resultado.trabajador,
+    dni: resultado.dni,
+    puesto: resultado.puesto,
+    firma: resultado.firma,
+    fecha: new Date(),
+  };
+  try {
+    const pdf = generar(especial, await plantillaDe(especial.plantilla), datos);
+    await descargar([[especial.archivo(datos), pdf]]);
+  } catch (error) {
+    ponerEstado("");
+    await alerta("No se ha podido preparar el documento", `${especial.boton}: ${error.message ?? error}`);
+  }
+}
+
+function crearBotonesEspeciales() {
+  const contenedor = $("botones-especiales");
+  for (const especial of ESPECIALES) {
+    const boton = document.createElement("button");
+    boton.type = "button";
+    boton.className = "boton secundario";
+    boton.textContent = especial.boton;
+    boton.title = `Descargar el documento de ${especial.boton} relleno con los datos del trabajador`;
+    boton.addEventListener("click", () => descargarEspecial(especial));
+    contenedor.append(boton);
+  }
+}
+
 // Utilidades de interfaz
 
 function ponerEstado(texto, destacado = false) {
@@ -531,6 +581,7 @@ function iniciar() {
   const repositorio = location.pathname.split("/").filter(Boolean)[0];
   if (usuario && repositorio) $("enlace-codigo").href = `https://github.com/${usuario}/${repositorio}`;
 
+  crearBotonesEspeciales();
   for (const id of ["btn-documento", "btn-firma"]) $(id).disabled = false;
   actualizarSello();
   limpiar();

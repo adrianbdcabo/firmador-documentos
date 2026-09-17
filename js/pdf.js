@@ -21,11 +21,13 @@ import {
 export { ErrorProcesado, FirmaNoEncontrada };
 
 export class Resultado {
-  constructor(trabajador, hojas, glifos, dni) {
+  constructor(trabajador, hojas, glifos, dni, puesto, firma) {
     this.trabajador = trabajador;
     this.hojas = hojas; // [{ clave, titulo, paginaOrigen, pdfOriginal, pdf }]
     this.glifos = glifos;
     this.dni = dni;
+    this.puesto = puesto; // p. ej. "AUXILIAR DE LIMPIEZA"
+    this.firma = firma; // PNG de la firma que se ha pegado en las hojas
     this.fecha = null; // null: la fecha original del documento
     this.avisos = [];
   }
@@ -95,8 +97,15 @@ export function procesar(datos, { fecha = null, imagenFirma = null, sello = null
       salida.destroy();
     }
 
-    const dni = dniDelTexto(Object.values(paginas).map((n) => textoPagina(doc.loadPage(n))).join(" "));
-    const resultado = new Resultado(nombreParaArchivo(trabajador) || "TRABAJADOR", hojas, glifosDelDocumento(doc), dni);
+    const textoHojas = Object.values(paginas).map((n) => textoPagina(doc.loadPage(n))).join(" ");
+    const resultado = new Resultado(
+      nombreParaArchivo(trabajador) || "TRABAJADOR",
+      hojas,
+      glifosDelDocumento(doc),
+      dniDelTexto(textoHojas),
+      puestoDelTexto(textoHojas),
+      firma,
+    );
     resultado.ponerFecha(fecha);
     return resultado;
   } finally {
@@ -276,6 +285,13 @@ function desescapar(texto) {
   return texto.replace(/\\([0-7]{1,3}|[\s\S])/g, (_, g) =>
     /^[0-7]+$/.test(g) ? String.fromCharCode(parseInt(g, 8)) : (especiales[g] ?? g),
   );
+}
+
+const PUESTO = /puesto de trabajo\s+(?:de\s+)?(.+?)\s+en la empresa usuaria/i;
+
+export function puestoDelTexto(texto) {
+  const coincidencia = PUESTO.exec(texto.replace(/\s+/g, " "));
+  return coincidencia ? coincidencia[1].trim() : "";
 }
 
 export function dniDelTexto(texto) {

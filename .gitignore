@@ -2,6 +2,7 @@ node_modules/
 
 # Nunca subir documentos ni imágenes reales (datos personales, firma o sello de la empresa)
 *.pdf
+!plantillas/*.pdf
 *.png
 *.jpg
 *.jpeg
