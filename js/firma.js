@@ -1,7 +1,7 @@
 // La firma que se pega en las hojas: sacada de un PDF firmado o de una captura de pantalla.
 
-import { capturarFirma, firmante } from "./pdf.js";
-import { ErrorProcesado, abrirPdf, cajaConTinta, mupdf, renderRecorte } from "./pdfutil.js";
+import { campoFirma, capturarFirma, firmaDeHoja, firmante, localizarHojas } from "./pdf.js";
+import { ErrorProcesado, FirmaNoEncontrada, abrirPdf, cajaConTinta, mupdf, renderRecorte } from "./pdfutil.js";
 
 const MARGEN_CAPTURA_PX = 3;
 
@@ -21,12 +21,38 @@ export class Firma {
   }
 }
 
+/** Firma de un PDF: la digital si la tiene y, si no, la que lleva pegada una hoja ya hecha. */
 export function desdePdf(datos, origen) {
   const doc = abrirPdf(datos);
   try {
-    const imagen = capturarFirma(doc);
-    const [nombre, nif] = firmante(doc);
-    return new Firma(imagen, origen, nombre, nif);
+    if (campoFirma(doc)) {
+      const [nombre, nif] = firmante(doc);
+      return new Firma(capturarFirma(doc), origen, nombre, nif);
+    }
+    const deHoja = firmaDeHoja(doc);
+    if (deHoja) return new Firma(deHoja.imagen, origen, deHoja.nombre, deHoja.nif);
+    throw new FirmaNoEncontrada(
+      "Ese PDF no tiene firma digital ni es una hoja ya firmada (INFO, EPI o REN) de la que copiar la firma.",
+    );
+  } finally {
+    doc.destroy();
+  }
+}
+
+const PAGINAS_HOJA_SUELTA = 3; // el documento global tiene muchas más
+
+/** Si el PDF es una hoja suelta ya firmada (y no el documento global), su firma; si no, null. */
+export function deHojaSuelta(datos, origen) {
+  const doc = abrirPdf(datos);
+  try {
+    if (doc.countPages() > PAGINAS_HOJA_SUELTA) return null;
+    try {
+      localizarHojas(doc); // si están las 3, es un documento laboral, no una hoja suelta
+      return null;
+    } catch {
+      const deHoja = firmaDeHoja(doc);
+      return deHoja ? new Firma(deHoja.imagen, origen, deHoja.nombre, deHoja.nif) : null;
+    }
   } finally {
     doc.destroy();
   }

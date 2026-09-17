@@ -165,6 +165,73 @@ export function capturarFirma(doc) {
   return renderRecorte((dispositivo, m) => campo.widget.run(dispositivo, m), matriz, recorte);
 }
 
+const TOLERANCIA_FIRMA = 14; // puntos de margen al buscar la firma pegada en una hoja ya hecha
+
+/**
+ * Firma pegada en una hoja ya hecha (INFO, EPI o REN), con el nombre y el DNI que figuran en ella.
+ * Se reconoce por su posición: la que ocupa el sitio donde va la firma, no los logos ni el sello.
+ */
+export function firmaDeHoja(doc) {
+  for (let i = 0; i < doc.countPages(); i++) {
+    const pagina = doc.loadPage(i);
+    const texto = textoPagina(pagina);
+    const hoja = config.HOJAS.find((h) => normalizar(texto).includes(h.busqueda));
+    if (!hoja) continue;
+    const ancla = buscarAncla(pagina, hoja.ladoAncla);
+    if (!ancla) continue;
+
+    const x = ancla[0] + hoja.firma.dx;
+    const y = ancla[1] + hoja.firma.dy;
+    const t = TOLERANCIA_FIRMA;
+    const zona = [x - t, y - t, x + config.CAJA_FIRMA.ancho + t, y + config.CAJA_FIRMA.alto + t];
+    let mejor = null;
+    const estructura = pagina.toStructuredText("preserve-images");
+    estructura.walk({
+      onImageBlock(bbox, _transformacion, imagen) {
+        const dentro = Math.max(0, Math.min(bbox[2], zona[2]) - Math.max(bbox[0], zona[0])) *
+          Math.max(0, Math.min(bbox[3], zona[3]) - Math.max(bbox[1], zona[1]));
+        const area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]);
+        const proporcion = area ? dentro / area : 0;
+        if (proporcion > 0.6 && (!mejor || proporcion > mejor.proporcion)) mejor = { proporcion, png: imagenAPng(imagen) };
+      },
+    });
+    estructura.destroy();
+    if (mejor) return { imagen: mejor.png, nombre: nombreDeLaFirma(pagina, ancla), nif: identificadorDelTexto(texto) };
+  }
+  return null;
+}
+
+/** Quién firma la hoja: en EPI el nombre va a la derecha del "Fdo." y en INFO y REN, debajo. */
+function nombreDeLaFirma(pagina, ancla) {
+  const util = (texto) => texto && !NIF_SUELTO.test(texto);
+  for (const linea of lineasDeTexto(pagina)) {
+    const mismaAltura = linea.bbox[1] < ancla[3] && linea.bbox[3] > ancla[1];
+    if (!mismaAltura) continue;
+    const texto = linea.chars.filter((ch) => ch.rect[0] > ancla[2]).map((ch) => ch.c).join("").trim();
+    if (util(texto)) return texto;
+  }
+  const debajo = nombreTrabajador(pagina, ancla);
+  return util(debajo) ? debajo : "";
+}
+
+function imagenAPng(imagen) {
+  let pix = imagen.toPixmap();
+  const espacio = pix.getColorSpace();
+  if (espacio && !espacio.isRGB() && !espacio.isGray()) pix = pix.convertToColorSpace(mupdf.ColorSpace.DeviceRGB, true);
+  try {
+    return pix.asPNG().slice();
+  } finally {
+    pix.destroy();
+  }
+}
+
+const NIF_SUELTO = /\b([XYZ]\d{7}[A-Z]|\d{8}[A-Z])\b/;
+
+/** DNI del texto: primero con su etiqueta y, si no aparece así, el primer DNI suelto de la hoja. */
+function identificadorDelTexto(texto) {
+  return dniDelTexto(texto) || NIF_SUELTO.exec(texto.replace(/\s+/g, " "))?.[1]?.toUpperCase() || "";
+}
+
 const FIRMANTE = /Digitally signed by\s+(.+?)\s*-\s*NIF\s*:\s*([A-Z0-9]+)/i;
 const DNI = /\bDNI(?:\/NIE)?\s*(?:n\s*[º°o]\.?)?\s*:?\s*([XYZ]?\d{7,8}[A-Z])\b/i;
 const NO_RECORRER = new Set(["Page", "Pages", "Font", "FontDescriptor", "Catalog"]);
@@ -220,7 +287,7 @@ export function nombreParaArchivo(texto) {
   return texto.replace(/[<>:"/\\|?*\x00-\x1f]/g, "").replace(/\s+/g, " ").replace(/^[ .]+|[ .]+$/g, "");
 }
 
-function buscarAncla(pagina, lado) {
+export function buscarAncla(pagina, lado) {
   const [x0, , x1] = pagina.getBounds();
   const mitad = (x0 + x1) / 2;
   return pagina

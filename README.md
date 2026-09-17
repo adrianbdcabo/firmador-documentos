@@ -16,6 +16,9 @@ solo en el navegador donde se cargó (no forma parte de esta web).
    - Si no lo está (o quieres usar otra), pulsa **Cargar firma** y elige otro documento
      firmado o una captura de la firma. También puedes hacer la captura con
      `Win + Mayús + S` y pegarla con `Ctrl + V`.
+   - La firma también se puede sacar de una hoja ya firmada (INFO, EPI o REN): se
+     reconoce tanto en **Cargar firma** como si se carga en **Cargar documentos
+     laborales**, y de ella se leen el nombre y el DNI que figuran en la hoja.
    - Si la firma sale de un PDF de otra persona (su NIF no coincide con el DNI del
      documento), la página avisa y pregunta.
    - La firma cargada sirve para ese documento; al cargar el siguiente se olvida.

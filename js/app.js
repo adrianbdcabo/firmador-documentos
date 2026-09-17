@@ -65,6 +65,19 @@ function guardarSello(bytes) {
 
 async function cargarDocumento(archivo) {
   const datos = new Uint8Array(await archivo.arrayBuffer());
+
+  // Si lo que se carga es una hoja suelta ya firmada (INFO, EPI o REN), se usa como firma.
+  let hojaFirmada = null;
+  try {
+    hojaFirmada = firmas.deHojaSuelta(datos, archivo.name);
+  } catch {
+    hojaFirmada = null; // no es un PDF válido: que lo diga el procesado normal
+  }
+  if (hojaFirmada) {
+    await usarFirma(() => hojaFirmada);
+    return;
+  }
+
   if (estado.firma?.usada) estado.firma = null; // ya sirvió para el anterior, normalmente de otro trabajador
   $("con-sello").checked = false; // cada documento empieza sin sello
   estado.documento = { nombre: archivo.name, datos };

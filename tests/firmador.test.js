@@ -8,7 +8,7 @@ import path from "node:path";
 import { describe, test } from "node:test";
 
 import { fechaDeHoy } from "../js/fecha.js";
-import { desdeImagen, desdePdf } from "../js/firma.js";
+import { deHojaSuelta, desdeImagen, desdePdf } from "../js/firma.js";
 import { ErrorProcesado, FirmaNoEncontrada, firmante, procesar } from "../js/pdf.js";
 import { abrirPdf, guardar, mupdf } from "../js/pdfutil.js";
 
@@ -60,7 +60,8 @@ function imagenes(bytes, indice = 0) {
 
 function llevaImagen(bytes, png) {
   const esperada = new mupdf.Image(png).toPixmap();
-  const pixeles = esperada.getPixels();
+  // Copia: getPixels() apunta a la memoria de MuPDF y deja de valer si esta crece al leer más imágenes.
+  const pixeles = esperada.getPixels().slice();
   return imagenes(bytes).some((im) => im.ancho === esperada.getWidth() && im.alto === esperada.getHeight() &&
     im.pixeles.length === pixeles.length && im.pixeles.every((v, i) => v === pixeles[i]));
 }
@@ -142,6 +143,29 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       assert.ok(llevaImagen(hoja.pdf, cinthia.imagen), hoja.clave);
       assert.ok(!llevaImagen(hoja.pdf, propia.imagen), hoja.clave);
     }
+  });
+
+  const HECHAS = ["INFO HECHA.pdf", "EPI HECHA.pdf", "REN HECHA.pdf"];
+
+  test("firma sacada de una hoja ya hecha (INFO, EPI o REN)", { skip: !HECHAS.every(existe) }, () => {
+    for (const archivo of HECHAS) {
+      const datos = leer(archivo);
+      const firma = desdePdf(datos, archivo);
+      assert.equal(firma.nombre, "CINTHIA OSAFAMEN", archivo);
+      assert.equal(firma.nif, "Y6912244E", archivo);
+      const imagen = new mupdf.Image(firma.imagen);
+      assert.deepEqual([imagen.getWidth(), imagen.getHeight()], [174, 76], `${archivo}: es la firma, no el sello ni un logo`);
+
+      // Sirve para firmar el documento de otra persona (avisando de que es de otra)
+      const resultado = procesar(sinFirmar(leer(DOCS["53850518C"].archivo)), { imagenFirma: firma.imagen, sello: SELLO });
+      assert.ok(resultado.hojas.every((h) => llevaImagen(h.pdf, firma.imagen)), archivo);
+      assert.equal(firma.esDe(resultado.dni), false, archivo);
+
+      // Y se reconoce como hoja suelta si se carga en «Cargar documentos laborales»
+      const suelta = deHojaSuelta(datos, archivo);
+      assert.equal(suelta?.nif, "Y6912244E", archivo);
+    }
+    assert.equal(deHojaSuelta(leer(DOCS.Y6912244E.archivo), "global"), null, "el documento global no es una hoja suelta");
   });
 
   test("firma desde una captura de pantalla", { skip: !existe(CAPTURA) }, () => {
