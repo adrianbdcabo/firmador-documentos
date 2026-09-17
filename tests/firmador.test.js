@@ -112,8 +112,18 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     assert.equal(new mupdf.PDFDocument(resultado.pack()).countPages(), 3);
   });
 
+  test("el sello es opcional", () => {
+    const datos = leer(DOCS.Y6912244E.archivo);
+    const sinSello = procesar(datos, {});
+    const conSello = procesar(datos, { sello: SELLO });
+    sinSello.hojas.forEach((hoja, i) => {
+      const antes = imagenes(datos, hoja.paginaOrigen - 1).length;
+      assert.equal(imagenes(hoja.pdf).length, antes + 1, `${hoja.clave}: sin sello solo se pega la firma`);
+      assert.equal(imagenes(conSello.hojas[i].pdf).length, antes + ESPERADO[hoja.clave].length, `${hoja.clave}: con sello`);
+    });
+  });
+
   test("errores controlados", () => {
-    assert.throws(() => procesar(leer(DOCS.Y6912244E.archivo), {}), ErrorProcesado);
     assert.throws(() => procesar(new TextEncoder().encode("esto no es un pdf"), { sello: SELLO }), ErrorProcesado);
     assert.throws(() => procesar(sinFirmar(leer(DOCS["51143385X"].archivo)), { sello: SELLO }), FirmaNoEncontrada);
     assert.throws(() => desdePdf(sinFirmar(leer(DOCS.Y6912244E.archivo)), "x"), FirmaNoEncontrada);

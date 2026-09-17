@@ -66,6 +66,7 @@ function guardarSello(bytes) {
 async function cargarDocumento(archivo) {
   const datos = new Uint8Array(await archivo.arrayBuffer());
   if (estado.firma?.usada) estado.firma = null; // ya sirvió para el anterior, normalmente de otro trabajador
+  $("con-sello").checked = false; // cada documento empieza sin sello
   estado.documento = { nombre: archivo.name, datos };
   await procesarDocumento();
 }
@@ -74,16 +75,13 @@ async function procesarDocumento() {
   const { nombre, datos } = estado.documento;
   limpiar();
   $("archivo").textContent = nombre;
-  if (!estado.sello) {
-    pedirSello();
-    return;
-  }
   ponerEstado("Procesando…");
   await pausa();
 
   let resultado;
   try {
-    resultado = procesar(datos, { fecha: fechaElegida(), imagenFirma: estado.firma?.imagen, sello: estado.sello });
+    const sello = $("con-sello").checked ? estado.sello : null;
+    resultado = procesar(datos, { fecha: fechaElegida(), imagenFirma: estado.firma?.imagen, sello });
   } catch (error) {
     if (error instanceof FirmaNoEncontrada) {
       pedirFirma();
@@ -95,7 +93,8 @@ async function procesarDocumento() {
     return;
   }
 
-  if (estado.firma && !estado.firma.esDe(resultado.dni)) {
+  // Solo se pregunta la primera vez que se aplica la firma, no al volver a generar las hojas (p. ej. al añadir el sello).
+  if (estado.firma && !estado.firma.usada && !estado.firma.esDe(resultado.dni)) {
     const usar = await confirmar(
       "La firma es de otra persona",
       `La firma cargada es de ${estado.firma.nombre} (NIF ${estado.firma.nif}), pero el documento es de ${resultado.trabajador} (DNI ${resultado.dni}).\n\n¿Quieres usar esta firma igualmente?`,
@@ -110,6 +109,7 @@ async function procesarDocumento() {
   if (estado.firma) estado.firma.usada = true;
 
   estado.resultado = resultado;
+  $("interruptor-sello").hidden = false;
   mostrarPrevias();
   $("btn-descargar").disabled = false;
   ponerEstado(TEXTOS.listo);
@@ -124,8 +124,8 @@ function limpiar() {
   $("tarjetas").replaceChildren();
   $("pila").hidden = true;
   $("pila").replaceChildren();
-  if (!estado.sello) pedirSello();
-  else mostrarZona(TEXTOS.zonaTitulo, TEXTOS.zonaSubtitulo, () => $("input-documento").click());
+  mostrarZona(TEXTOS.zonaTitulo, TEXTOS.zonaSubtitulo, () => $("input-documento").click());
+  $("interruptor-sello").hidden = true; // aparece una vez generadas las hojas
   $("btn-descargar").disabled = true;
   actualizarDatos();
   ponerEstado("");
@@ -143,12 +143,7 @@ function pedirFirma() {
   mostrarZona("Este documento no está firmado", TEXTOS.pedirFirma, () => $("input-firma").click());
 }
 
-function pedirSello() {
-  ponerEstado("Falta el sello de la empresa. Solo hay que cargarlo la primera vez en este dispositivo.");
-  mostrarZona("Carga el sello de la empresa", "Pulsa aquí y elige la imagen del sello (solo la primera vez en este dispositivo)", () => $("input-sello").click());
-}
-
-const esperandoFirma = () => estado.documento && !estado.resultado && estado.sello;
+const esperandoFirma = () => estado.documento && !estado.resultado;
 
 // Firma
 
@@ -189,24 +184,44 @@ async function quitarFirma() {
 
 // Sello
 
+let esperandoSello = false; // se abrió el selector al activar «Añadir sello» sin sello guardado
+
 async function cargarSelloArchivo(archivo) {
+  esperandoSello = false;
   const datos = new Uint8Array(await archivo.arrayBuffer());
   try {
     firmas.validarImagen(datos);
   } catch (error) {
+    if (!estado.sello) $("con-sello").checked = false;
     await alerta("No se ha podido cargar el sello", error.message);
     return;
   }
   const guardado = guardarSello(datos);
   actualizarSello();
+  if (estado.documento && $("con-sello").checked) await procesarDocumento();
+  ponerEstado(
+    guardado ? "Sello guardado en este navegador: la próxima vez no hará falta cargarlo." : "Sello cargado (este navegador no permite guardarlo: habrá que cargarlo en cada uso).",
+    true,
+  );
+}
+
+async function cambiarSello() {
+  if ($("con-sello").checked && !estado.sello) {
+    // Primera vez en este navegador: hay que elegir la imagen. Si se cancela, el interruptor vuelve a apagarse.
+    esperandoSello = true;
+    $("input-sello").click();
+    return;
+  }
   if (estado.documento) await procesarDocumento();
-  else limpiar();
-  ponerEstado(guardado ? "Sello guardado en este navegador." : "Sello cargado (este navegador no permite guardarlo: habrá que cargarlo en cada uso).", true);
+}
+
+function cancelarSello() {
+  if (esperandoSello && !estado.sello) $("con-sello").checked = false;
+  esperandoSello = false;
 }
 
 function actualizarSello() {
-  $("estado-sello").textContent = estado.sello ? "Sello cargado" : "Falta el sello";
-  $("btn-sello").textContent = estado.sello ? "Cambiar" : "Cargar sello";
+  $("btn-sello").hidden = !estado.sello;
 }
 
 // Fecha
@@ -446,6 +461,10 @@ function iniciar() {
   enlazarArchivo("btn-sello", "input-sello", cargarSelloArchivo);
   $("quitar-firma").addEventListener("click", quitarFirma);
   $("fecha-hoy").addEventListener("change", cambiarFecha);
+  $("con-sello").addEventListener("change", cambiarSello);
+  $("input-sello").addEventListener("cancel", cancelarSello);
+  // Navegadores sin el evento "cancel": si se vuelve a la página sin haber elegido imagen, se da por cancelado.
+  window.addEventListener("focus", () => setTimeout(() => esperandoSello && cancelarSello(), 1000));
   $("btn-descargar").addEventListener("click", descargarTodo);
 
   for (const boton of document.querySelectorAll(".selector button")) {
@@ -487,7 +506,6 @@ function iniciar() {
     $("zona").classList.remove("arrastrando");
     for (const archivo of e.dataTransfer?.files ?? []) {
       const esPdf = archivo.type === "application/pdf" || /\.pdf$/i.test(archivo.name);
-      if (esImagen(archivo) && !estado.sello) return cargarSelloArchivo(archivo);
       if (esImagen(archivo) || (esPdf && esperandoFirma())) return cargarFirmaArchivo(archivo);
       if (esPdf) return cargarDocumento(archivo);
     }

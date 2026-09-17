@@ -88,6 +88,7 @@ button { font: inherit; color: inherit; }
 .fila-firma img { height: 26px; background: #fff; border: 1px solid var(--borde); }
 .fila-firma .texto-cargada { color: var(--texto); }
 
+.interruptores { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .interruptor { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; margin-top: 4px; }
 .interruptor input { position: absolute; opacity: 0; pointer-events: none; }
 .interruptor .pista {

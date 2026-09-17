@@ -37,11 +37,18 @@
           <button type="button" id="quitar-firma" class="enlace pequeno" hidden>Quitar</button>
         </div>
       </div>
-      <label class="interruptor">
-        <input type="checkbox" id="fecha-hoy">
-        <span class="pista" aria-hidden="true"></span>
-        <span>Poner fecha de hoy</span>
-      </label>
+      <div class="interruptores">
+        <label class="interruptor">
+          <input type="checkbox" id="fecha-hoy">
+          <span class="pista" aria-hidden="true"></span>
+          <span>Poner fecha de hoy</span>
+        </label>
+        <label class="interruptor" id="interruptor-sello" hidden>
+          <input type="checkbox" id="con-sello">
+          <span class="pista" aria-hidden="true"></span>
+          <span>Añadir sello</span>
+        </label>
+      </div>
     </section>
 
     <section id="area" class="area">
@@ -66,7 +73,7 @@
         <button type="button" role="radio" data-modo="pack" aria-checked="false">Pack único (3 hojas)</button>
       </div>
       <div class="derecha">
-        <span class="pequeno suave"><span id="estado-sello"></span> · <button type="button" id="btn-sello" class="enlace pequeno">Cargar sello</button></span>
+        <button type="button" id="btn-sello" class="enlace pequeno" hidden>Cambiar sello</button>
         <button type="button" id="btn-descargar" class="boton principal" disabled>Descargar</button>
       </div>
     </footer>

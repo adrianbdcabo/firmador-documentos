@@ -5,13 +5,12 @@ Página web que coge el documento laboral (global), saca las 3 hojas que hay que
 de la empresa, y las descarga en PDF.
 
 **Todo se procesa en el navegador.** Los documentos no se envían a ningún servidor ni se
-guardan en ningún sitio. Lo único que se recuerda es el sello de la empresa, y solo en el
-navegador del ordenador donde se cargó (no forma parte de esta web).
+guardan en ningún sitio. Lo único que se recuerda es el sello de la empresa, si se usa, y
+solo en el navegador donde se cargó (no forma parte de esta web).
 
 ## Cómo se usa
 
-1. La primera vez en cada ordenador: carga la imagen del sello de la empresa.
-2. Pulsa **Cargar documentos laborales** o arrastra el PDF a la página. Las hojas se buscan
+1. Pulsa **Cargar documentos laborales** o arrastra el PDF a la página. Las hojas se buscan
    por su título, da igual cuántas páginas tenga el documento.
    - Si el documento está firmado digitalmente, se usa su propia firma.
    - Si no lo está (o quieres usar otra), pulsa **Cargar firma** y elige otro documento
@@ -20,8 +19,11 @@ navegador del ordenador donde se cargó (no forma parte de esta web).
    - Si la firma sale de un PDF de otra persona (su NIF no coincide con el DNI del
      documento), la página avisa y pregunta.
    - La firma cargada sirve para ese documento; al cargar el siguiente se olvida.
-3. Opcional: **Poner fecha de hoy** cambia la fecha de "En COSLADA, a …" por la de hoy,
+2. Opcional: **Poner fecha de hoy** cambia la fecha de "En COSLADA, a …" por la de hoy,
    con la misma letra y tamaño que el original.
+3. Opcional: **Añadir sello** pone el sello de la empresa en INFO y REN. Cada documento
+   empieza sin sello. La primera vez en cada navegador pide la imagen del sello y la
+   recuerda para las siguientes (se puede cambiar con **Cambiar sello**).
 4. Elige **3 documentos separados** o **Pack único** y pulsa **Descargar**. Para bajar solo
    una hoja, pincha sobre ella en la vista previa.
 

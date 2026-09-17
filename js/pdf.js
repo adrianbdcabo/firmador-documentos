@@ -66,10 +66,10 @@ export class Resultado {
 /**
  * Separa y firma las hojas.
  * Con `imagenFirma` (PNG) se pega esa firma aunque el documento ya esté firmado; sin ella se usa
- * la firma digital del propio documento. `sello` es la imagen del sello de la empresa.
+ * la firma digital del propio documento. `sello` es la imagen del sello de la empresa; sin ella
+ * las hojas salen sin sello.
  */
 export function procesar(datos, { fecha = null, imagenFirma = null, sello = null } = {}) {
-  if (!sello) throw new ErrorProcesado("Falta el sello de la empresa: cárgalo con «Cargar sello».");
   const doc = abrirPdf(datos);
   try {
     const paginas = localizarHojas(doc);
@@ -88,7 +88,7 @@ export function procesar(datos, { fecha = null, imagenFirma = null, sello = null
       const ancla = buscarAncla(pagina, hoja.ladoAncla);
       if (hoja.clave === config.HOJA_NOMBRE) trabajador = nombreTrabajador(pagina, ancla);
       pegarImagen(salida, pagina, firma, hoja.firma, config.CAJA_FIRMA, ancla);
-      if (hoja.sello) pegarImagen(salida, pagina, sello, hoja.sello, config.CAJA_SELLO, ancla);
+      if (hoja.sello && sello) pegarImagen(salida, pagina, sello, hoja.sello, config.CAJA_SELLO, ancla);
 
       hojas.push({ clave: hoja.clave, titulo: hoja.titulo, paginaOrigen: numeroPagina + 1, pdfOriginal: guardar(salida), pdf: null });
       pagina.destroy();
