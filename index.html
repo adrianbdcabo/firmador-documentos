@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Firmador de documentos laborales</title>
+  <meta name="description" content="Separa las hojas INFO, EPI y REN del documento laboral y les pone la firma y el sello. Todo se procesa en el navegador.">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/estilos.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <main class="app">
+    <header class="cabecera">
+      <div class="titulos">
+        <h1>Firmador de documentos laborales</h1>
+        <p id="archivo" class="suave">Ningún documento cargado</p>
+      </div>
+      <div class="acciones">
+        <button type="button" id="btn-firma" class="boton secundario" disabled>Cargar firma</button>
+        <button type="button" id="btn-documento" class="boton secundario" disabled>Cargar documentos laborales</button>
+      </div>
+      <input type="file" id="input-documento" accept="application/pdf,.pdf" hidden>
+      <input type="file" id="input-firma" accept="application/pdf,.pdf,image/png,image/jpeg,image/bmp,.png,.jpg,.jpeg,.bmp" hidden>
+      <input type="file" id="input-sello" accept="image/png,image/jpeg,image/bmp,.png,.jpg,.jpeg,.bmp" hidden>
+    </header>
+
+    <hr class="separador">
+
+    <section class="barra">
+      <div class="datos">
+        <h2 id="trabajador"></h2>
+        <p id="fecha" class="suave pequeno"></p>
+        <div class="fila-firma">
+          <img id="img-firma" alt="Firma cargada" hidden>
+          <span id="texto-firma" class="pequeno suave"></span>
+          <button type="button" id="quitar-firma" class="enlace pequeno" hidden>Quitar</button>
+        </div>
+      </div>
+      <label class="interruptor">
+        <input type="checkbox" id="fecha-hoy">
+        <span class="pista" aria-hidden="true"></span>
+        <span>Poner fecha de hoy</span>
+      </label>
+    </section>
+
+    <section id="area" class="area">
+      <button type="button" id="zona" class="zona">
+        <svg class="icono-documento" viewBox="0 0 34 44" aria-hidden="true">
+          <path d="M1 1h22l10 10v32H1z" />
+          <path d="M23 1v10h10" />
+          <path class="lineas" d="M8 20h18M8 27h18M8 34h12" />
+        </svg>
+        <strong id="zona-titulo">Preparando…</strong>
+        <span id="zona-subtitulo">Cargando el motor de PDF (solo tarda la primera vez)</span>
+      </button>
+      <div id="tarjetas" class="tarjetas" hidden></div>
+      <div id="pila" class="pila" hidden></div>
+    </section>
+
+    <hr class="separador">
+
+    <footer class="pie">
+      <div class="selector" role="radiogroup" aria-label="Formato de descarga">
+        <button type="button" role="radio" data-modo="separados" aria-checked="true">3 documentos separados</button>
+        <button type="button" role="radio" data-modo="pack" aria-checked="false">Pack único (3 hojas)</button>
+      </div>
+      <div class="derecha">
+        <span class="pequeno suave"><span id="estado-sello"></span> · <button type="button" id="btn-sello" class="enlace pequeno">Cargar sello</button></span>
+        <button type="button" id="btn-descargar" class="boton principal" disabled>Descargar</button>
+      </div>
+    </footer>
+
+    <p id="estado" class="estado pequeno suave" role="status"></p>
+    <p class="creditos pequeno suave">
+      Los documentos se procesan en este navegador: no se envían a ningún servidor.
+      · <a id="enlace-codigo" href="https://github.com/">Código fuente</a> (usa MuPDF.js, licencia AGPL)
+    </p>
+  </main>
+
+  <dialog id="dialogo">
+    <h3 id="dialogo-titulo"></h3>
+    <p id="dialogo-texto"></p>
+    <div class="dialogo-botones">
+      <button type="button" id="dialogo-no" class="boton secundario">No</button>
+      <button type="button" id="dialogo-si" class="boton principal">Aceptar</button>
+    </div>
+  </dialog>
+
+  <script>
+    // Si el programa no llega a cargar (navegador muy antiguo o bloqueo), avisarlo en vez de quedarse en "Preparando…".
+    setTimeout(function () {
+      if (!window.firmadorListo) {
+        document.getElementById("zona-titulo").textContent = "No se ha podido cargar el programa";
+        document.getElementById("zona-subtitulo").textContent = "Usa Edge, Chrome o Firefox actualizados y recarga la página.";
+      }
+    }, 30000);
+  </script>
+</body>
+</html>
