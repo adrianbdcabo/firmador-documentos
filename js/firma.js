@@ -75,11 +75,6 @@ export function desdeImagen(datos, origen) {
   }
 }
 
-/** Comprueba que los bytes son una imagen utilizable (para el sello). */
-export function validarImagen(datos) {
-  paginaConImagen(datos, "No se puede leer la imagen del sello. Usa un PNG o JPG.").destroy();
-}
-
 function paginaConImagen(datos, mensajeError) {
   let imagen;
   try {

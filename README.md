@@ -5,8 +5,7 @@ Página web que coge el documento laboral (global), saca las 3 hojas que hay que
 de la empresa, y las descarga en PDF.
 
 **Todo se procesa en el navegador.** Los documentos no se envían a ningún servidor ni se
-guardan en ningún sitio. Lo único que se recuerda es el sello de la empresa, si se usa, y
-solo en el navegador donde se cargó (no forma parte de esta web).
+guardan en ningún sitio.
 
 ## Cómo se usa
 
@@ -25,8 +24,8 @@ solo en el navegador donde se cargó (no forma parte de esta web).
 2. Opcional: **Poner fecha de hoy** cambia la fecha de "En COSLADA, a …" por la de hoy,
    con la misma letra y tamaño que el original.
 3. Opcional: **Añadir sello** pone el sello de la empresa en INFO y REN. Cada documento
-   empieza sin sello. La primera vez en cada navegador pide la imagen del sello y la
-   recuerda para las siguientes (se puede cambiar con **Cambiar sello**).
+   empieza sin sello. El sello viene con la web (`recursos/sello-temps.jpeg`): para
+   cambiarlo, se sustituye ese archivo.
 4. Elige **3 documentos separados** o **Pack único** y pulsa **Descargar**. Para bajar solo
    una hoja, pincha sobre ella en la vista previa.
 5. En **DOCUS ESPECIALES PLATAFORMAS**, a la derecha, cada botón descarga el documento

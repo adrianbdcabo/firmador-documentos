@@ -7,7 +7,7 @@ import { ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
 import { miniatura } from "./pdfutil.js";
 
 const $ = (id) => document.getElementById(id);
-const CLAVE_SELLO = "firmador-documentos:sello";
+const RUTA_SELLO = "recursos/sello-temps.jpeg"; // el sello viene con la web: no hay que cargarlo
 const DESFASE_PACK = 0.13; // parte de cada hoja de detrás que asoma en la vista del pack
 const ANCHO_MAX_PACK = 380;
 const RESERVA_ETIQUETAS_PACK = 80; // hueco a la derecha de la pila para "INFO · página 1"
@@ -34,33 +34,10 @@ const estado = {
   documento: null, // { nombre, datos } del documento laboral cargado
   firma: null, // firma cargada aparte; si no hay, se usa la del documento
   resultado: null,
-  sello: leerSello(),
+  sello: null, // imagen del sello de la empresa, que se descarga con la web
   modo: "separados",
   urls: new Map(), // miniaturas ya generadas (bytes del PDF -> URL)
 };
-
-// Sello: se guarda solo en este navegador, nunca se publica con la web.
-
-function leerSello() {
-  try {
-    const guardado = localStorage.getItem(CLAVE_SELLO);
-    return guardado ? Uint8Array.from(atob(guardado), (c) => c.charCodeAt(0)) : null;
-  } catch {
-    return null;
-  }
-}
-
-function guardarSello(bytes) {
-  estado.sello = bytes;
-  try {
-    let binario = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) binario += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    localStorage.setItem(CLAVE_SELLO, btoa(binario));
-    return true;
-  } catch {
-    return false; // navegador en modo privado o sin almacenamiento: vale para esta sesión
-  }
-}
 
 // Documento laboral
 
@@ -200,44 +177,26 @@ async function quitarFirma() {
 
 // Sello
 
-let esperandoSello = false; // se abrió el selector al activar «Añadir sello» sin sello guardado
-
-async function cargarSelloArchivo(archivo) {
-  esperandoSello = false;
-  const datos = new Uint8Array(await archivo.arrayBuffer());
-  try {
-    firmas.validarImagen(datos);
-  } catch (error) {
-    if (!estado.sello) $("con-sello").checked = false;
-    await alerta("No se ha podido cargar el sello", error.message);
-    return;
+async function cargarSello() {
+  if (!estado.sello) {
+    const respuesta = await fetch(new URL(RUTA_SELLO, location.href));
+    if (!respuesta.ok) throw new Error(`no se ha podido cargar el sello (${respuesta.status})`);
+    estado.sello = new Uint8Array(await respuesta.arrayBuffer());
   }
-  const guardado = guardarSello(datos);
-  actualizarSello();
-  if (estado.documento && $("con-sello").checked) await procesarDocumento();
-  ponerEstado(
-    guardado ? "Sello guardado en este navegador: la próxima vez no hará falta cargarlo." : "Sello cargado (este navegador no permite guardarlo: habrá que cargarlo en cada uso).",
-    true,
-  );
+  return estado.sello;
 }
 
 async function cambiarSello() {
   if ($("con-sello").checked && !estado.sello) {
-    // Primera vez en este navegador: hay que elegir la imagen. Si se cancela, el interruptor vuelve a apagarse.
-    esperandoSello = true;
-    $("input-sello").click();
-    return;
+    try {
+      await cargarSello();
+    } catch (error) {
+      $("con-sello").checked = false;
+      await alerta("No se ha podido añadir el sello", error.message);
+      return;
+    }
   }
   if (estado.documento) await procesarDocumento();
-}
-
-function cancelarSello() {
-  if (esperandoSello && !estado.sello) $("con-sello").checked = false;
-  esperandoSello = false;
-}
-
-function actualizarSello() {
-  $("btn-sello").hidden = !estado.sello;
 }
 
 // Fecha
@@ -521,13 +480,9 @@ function esImagen(archivo) {
 function iniciar() {
   enlazarArchivo("btn-documento", "input-documento", cargarDocumento);
   enlazarArchivo("btn-firma", "input-firma", cargarFirmaArchivo);
-  enlazarArchivo("btn-sello", "input-sello", cargarSelloArchivo);
   $("quitar-firma").addEventListener("click", quitarFirma);
   $("fecha-hoy").addEventListener("change", cambiarFecha);
   $("con-sello").addEventListener("change", cambiarSello);
-  $("input-sello").addEventListener("cancel", cancelarSello);
-  // Navegadores sin el evento "cancel": si se vuelve a la página sin haber elegido imagen, se da por cancelado.
-  window.addEventListener("focus", () => setTimeout(() => esperandoSello && cancelarSello(), 1000));
   $("btn-descargar").addEventListener("click", descargarTodo);
 
   for (const boton of document.querySelectorAll(".selector button")) {
@@ -583,7 +538,12 @@ function iniciar() {
 
   crearBotonesEspeciales();
   for (const id of ["btn-documento", "btn-firma"]) $(id).disabled = false;
-  actualizarSello();
+  cargarSello().catch(() => {}); // se va descargando; si falla, se avisa al activar el interruptor
+  try {
+    localStorage.removeItem("firmador-documentos:sello"); // sobra: antes se guardaba aquí
+  } catch {
+    // sin almacenamiento disponible: nada que limpiar
+  }
   limpiar();
   window.firmadorListo = true;
 }
