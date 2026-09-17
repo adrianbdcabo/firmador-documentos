@@ -62,11 +62,16 @@ async function cargarDocumento(archivo) {
   await procesarDocumento();
 }
 
-async function procesarDocumento() {
+/**
+ * Genera las hojas del documento cargado.
+ * Con `mantenerVista` no se vacía la pantalla mientras se rehacen (al añadir el sello o cambiar
+ * la firma), para que no haya parpadeo: lo anterior sigue a la vista hasta que lo nuevo está listo.
+ */
+async function procesarDocumento({ mantenerVista = false } = {}) {
   const { nombre, datos } = estado.documento;
-  limpiar();
+  if (!mantenerVista) limpiar();
   $("archivo").textContent = nombre;
-  ponerEstado("Procesando…");
+  ponerEstado(mantenerVista ? "Actualizando…" : "Procesando…");
   await pausa();
 
   let resultado;
@@ -74,6 +79,7 @@ async function procesarDocumento() {
     const sello = $("con-sello").checked ? estado.sello : null;
     resultado = procesar(datos, { fecha: fechaElegida(), imagenFirma: estado.firma?.imagen, sello });
   } catch (error) {
+    if (mantenerVista) limpiar();
     if (error instanceof FirmaNoEncontrada) {
       pedirFirma();
       return;
@@ -93,7 +99,7 @@ async function procesarDocumento() {
     );
     if (!usar) {
       estado.firma = null;
-      await procesarDocumento();
+      await procesarDocumento({ mantenerVista });
       return;
     }
   }
@@ -102,7 +108,7 @@ async function procesarDocumento() {
   estado.resultado = resultado;
   $("interruptor-sello").hidden = false;
   $("especiales").hidden = false;
-  mostrarPrevias();
+  await mostrarPrevias();
   $("btn-descargar").disabled = false;
   ponerEstado(TEXTOS.listo);
   await avisarFecha();
@@ -110,7 +116,7 @@ async function procesarDocumento() {
 
 function limpiar() {
   estado.resultado = null;
-  for (const url of estado.urls.values()) URL.revokeObjectURL(url);
+  for (const porAncho of estado.urls.values()) for (const url of porAncho.values()) URL.revokeObjectURL(url);
   estado.urls.clear();
   $("tarjetas").hidden = true;
   $("tarjetas").replaceChildren();
@@ -159,7 +165,7 @@ async function usarFirma(obtener) {
   }
   estado.firma = firma;
   if (estado.documento) {
-    await procesarDocumento(); // se aplica al documento que ya está cargado
+    await procesarDocumento({ mantenerVista: true }); // se aplica al documento que ya está cargado
   } else {
     actualizarDatos();
     ponerEstado("Firma cargada. Ahora carga el documento laboral.");
@@ -168,7 +174,7 @@ async function usarFirma(obtener) {
 
 async function quitarFirma() {
   estado.firma = null;
-  if (estado.documento) await procesarDocumento();
+  if (estado.documento) await procesarDocumento({ mantenerVista: true });
   else {
     actualizarDatos();
     ponerEstado("");
@@ -196,7 +202,7 @@ async function cambiarSello() {
       return;
     }
   }
-  if (estado.documento) await procesarDocumento();
+  if (estado.documento) await procesarDocumento({ mantenerVista: true });
 }
 
 // Fecha
@@ -217,7 +223,7 @@ async function cambiarFecha() {
     $("fecha-hoy").checked = false;
     await alerta("Error inesperado", `No se ha podido cambiar la fecha:\n${error}`);
   }
-  mostrarPrevias();
+  await mostrarPrevias();
   ponerEstado(TEXTOS.listo);
   await avisarFecha();
 }
@@ -274,52 +280,79 @@ function urlMiniatura(pdf, ancho) {
   return porPdf.get(clave);
 }
 
-function mostrarPrevias() {
-  actualizarDatos();
-  $("zona").hidden = true;
-  if (estado.modo === "pack") mostrarPack();
-  else mostrarTarjetas();
+/** Espera a que la imagen esté cargada, para cambiarla sin que parpadee. */
+function precargar(url) {
+  return new Promise((resolver) => {
+    const imagen = new Image();
+    imagen.onload = imagen.onerror = () => resolver(url);
+    imagen.src = url;
+  });
 }
 
-function mostrarTarjetas() {
-  const { resultado } = estado;
-  $("pila").hidden = true;
-  const contenedor = $("tarjetas");
-  contenedor.replaceChildren();
-  const ancho = Math.round(300 * (window.devicePixelRatio || 1));
-  for (const hoja of resultado.hojas) {
-    const tarjeta = document.createElement("button");
-    tarjeta.type = "button";
-    tarjeta.className = "tarjeta";
-    tarjeta.title = `Descargar solo ${hoja.clave}`;
-    const img = document.createElement("img");
-    img.alt = `Vista previa de ${hoja.clave}`;
-    img.src = urlMiniatura(hoja.pdf, ancho);
-    const leyenda = document.createElement("span");
-    leyenda.className = "leyenda";
-    leyenda.innerHTML = `<span class="clave"></span><span class="detalle"><span class="en-reposo"></span><span class="al-pasar"></span><span class="hecho">✓ Descargado</span></span>`;
-    leyenda.querySelector(".clave").textContent = hoja.clave;
-    leyenda.querySelector(".en-reposo").textContent = `página ${hoja.paginaOrigen}`;
-    leyenda.querySelector(".al-pasar").textContent = `↓ Descargar ${hoja.clave}`;
-    tarjeta.append(img, leyenda);
-    tarjeta.addEventListener("click", () => {
-      descargar([[`${hoja.clave} - ${resultado.trabajador}.pdf`, hoja.pdf]]);
-      tarjeta.classList.add("descargada");
-      setTimeout(() => tarjeta.classList.remove("descargada"), 1800);
-    });
-    contenedor.append(tarjeta);
+/** Suelta las miniaturas de versiones anteriores de las hojas (al cambiar la fecha o el sello). */
+function soltarMiniaturasViejas() {
+  const enUso = new Set(estado.resultado?.hojas.map((hoja) => hoja.pdf) ?? []);
+  for (const [pdf, porAncho] of estado.urls) {
+    if (enUso.has(pdf)) continue;
+    for (const url of porAncho.values()) URL.revokeObjectURL(url);
+    estado.urls.delete(pdf);
   }
+}
+
+async function mostrarPrevias() {
+  actualizarDatos();
+  if (estado.modo === "pack") await mostrarPack();
+  else await mostrarTarjetas();
+  $("zona").hidden = true;
+  soltarMiniaturasViejas();
+}
+
+async function mostrarTarjetas() {
+  const { resultado } = estado;
+  const contenedor = $("tarjetas");
+  const ancho = Math.round(300 * (window.devicePixelRatio || 1));
+  const urls = await Promise.all(resultado.hojas.map((hoja) => precargar(urlMiniatura(hoja.pdf, ancho))));
+
+  // Se reutilizan las tarjetas que ya están puestas: así no desaparecen y vuelven a aparecer.
+  if (contenedor.children.length !== resultado.hojas.length) {
+    contenedor.replaceChildren(...resultado.hojas.map(() => crearTarjeta()));
+  }
+  resultado.hojas.forEach((hoja, i) => actualizarTarjeta(contenedor.children[i], hoja, urls[i], resultado.trabajador));
   contenedor.hidden = false;
+  $("pila").hidden = true;
 }
 
-function mostrarPack() {
+function crearTarjeta() {
+  const tarjeta = document.createElement("button");
+  tarjeta.type = "button";
+  tarjeta.className = "tarjeta";
+  tarjeta.innerHTML = '<img alt=""><span class="leyenda"><span class="clave"></span>' +
+    '<span class="detalle"><span class="en-reposo"></span><span class="al-pasar"></span><span class="hecho">✓ Descargado</span></span></span>';
+  return tarjeta;
+}
+
+function actualizarTarjeta(tarjeta, hoja, url, trabajador) {
+  const img = tarjeta.querySelector("img");
+  img.alt = `Vista previa de ${hoja.clave}`;
+  if (img.src !== url) img.src = url;
+  tarjeta.title = `Descargar solo ${hoja.clave}`;
+  tarjeta.querySelector(".clave").textContent = hoja.clave;
+  tarjeta.querySelector(".en-reposo").textContent = `página ${hoja.paginaOrigen}`;
+  tarjeta.querySelector(".al-pasar").textContent = `↓ Descargar ${hoja.clave}`;
+  tarjeta.onclick = () => {
+    descargar([[`${hoja.clave} - ${trabajador}.pdf`, hoja.pdf]]);
+    tarjeta.classList.add("descargada");
+    setTimeout(() => tarjeta.classList.remove("descargada"), 1800);
+  };
+}
+
+async function mostrarPack() {
+  $("pila").hidden = false;
+  await colocarPila();
   $("tarjetas").hidden = true;
-  const pila = $("pila");
-  pila.hidden = false;
-  colocarPila();
 }
 
-function colocarPila() {
+async function colocarPila() {
   const { resultado } = estado;
   const pila = $("pila");
   if (!resultado || pila.hidden) return;
@@ -334,25 +367,35 @@ function colocarPila() {
   const y0 = Math.max(4, (pila.clientHeight - alto - desfase * (n - 1)) / 2);
   const resolucion = Math.round(ancho * (window.devicePixelRatio || 1));
 
-  pila.replaceChildren();
+  const urls = await Promise.all(resultado.hojas.map((hoja) => precargar(urlMiniatura(hoja.pdf, resolucion))));
+
+  // Se reutilizan las hojas ya puestas (una hoja y su etiqueta por cada una) para que no parpadeen.
+  if (pila.children.length !== n * 2) {
+    pila.replaceChildren(...resultado.hojas.flatMap(() => {
+      const marco = document.createElement("div");
+      marco.className = "hoja";
+      marco.innerHTML = '<img alt="">';
+      const etiqueta = document.createElement("div");
+      etiqueta.className = "etiqueta";
+      etiqueta.innerHTML = "<strong></strong><span></span>";
+      return [marco, etiqueta];
+    }));
+  }
+
   // De atrás hacia delante: la última hoja arriba del todo y la primera, entera delante.
   for (let posicion = 0; posicion < n; posicion++) {
-    const hoja = resultado.hojas[n - 1 - posicion];
+    const indice = n - 1 - posicion;
+    const hoja = resultado.hojas[indice];
     const y = y0 + posicion * desfase;
-    const marco = document.createElement("div");
-    marco.className = "hoja";
+    const marco = pila.children[posicion * 2];
+    const etiqueta = pila.children[posicion * 2 + 1];
     Object.assign(marco.style, { left: `${x0}px`, top: `${y}px`, width: `${ancho}px`, height: `${alto}px` });
-    const img = document.createElement("img");
+    const img = marco.querySelector("img");
     img.alt = `Vista previa de ${hoja.clave}`;
-    img.src = urlMiniatura(hoja.pdf, resolucion);
-    marco.append(img);
-    const etiqueta = document.createElement("div");
-    etiqueta.className = "etiqueta";
+    if (img.src !== urls[indice]) img.src = urls[indice];
     Object.assign(etiqueta.style, { left: `${x0 + ancho + 18}px`, top: `${y + 4}px` });
-    etiqueta.innerHTML = "<strong></strong><span></span>";
     etiqueta.querySelector("strong").textContent = hoja.clave;
     etiqueta.querySelector("span").textContent = `página ${hoja.paginaOrigen}`;
-    pila.append(marco, etiqueta);
   }
 }
 
