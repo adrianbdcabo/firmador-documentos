@@ -9,6 +9,25 @@ const $ = (id) => document.getElementById(id);
 const CLAVE_SELLO = "firmador-documentos:sello";
 const DESFASE_PACK = 0.13; // parte de cada hoja de detrás que asoma en la vista del pack
 const ANCHO_MAX_PACK = 380;
+const RESERVA_ETIQUETAS_PACK = 80; // hueco a la derecha de la pila para "INFO · página 1"
+
+// En móviles y tabletas no hay arrastrar, Ctrl+V ni "pasar el ratón": los textos cambian.
+const TACTIL = matchMedia("(hover: none) and (pointer: coarse)").matches;
+const TEXTOS = TACTIL
+  ? {
+      zonaTitulo: "Toca aquí para cargar el documento laboral",
+      zonaSubtitulo: "o usa «Cargar documentos laborales»",
+      pedirFirma: "Pulsa «Cargar firma» y elige un PDF firmado o una captura de la firma",
+      sinFirma: "Firma: la del documento, o pulsa «Cargar firma»",
+      listo: "Listo. Pulsa Descargar, o toca una hoja para descargar solo esa.",
+    }
+  : {
+      zonaTitulo: "Arrastra aquí el documento laboral",
+      zonaSubtitulo: "o pulsa «Cargar documentos laborales»",
+      pedirFirma: "Pulsa «Cargar firma» (PDF firmado o captura) o pega una captura con Ctrl+V",
+      sinFirma: "Firma: la del documento, o pulsa «Cargar firma» / pega una captura con Ctrl+V",
+      listo: "Listo. Pulsa Descargar, o pincha en una hoja para descargar solo esa.",
+    };
 
 const estado = {
   documento: null, // { nombre, datos } del documento laboral cargado
@@ -93,7 +112,7 @@ async function procesarDocumento() {
   estado.resultado = resultado;
   mostrarPrevias();
   $("btn-descargar").disabled = false;
-  ponerEstado("Listo. Pulsa Descargar, o pincha en una hoja para descargar solo esa.");
+  ponerEstado(TEXTOS.listo);
   await avisarFecha();
 }
 
@@ -106,7 +125,7 @@ function limpiar() {
   $("pila").hidden = true;
   $("pila").replaceChildren();
   if (!estado.sello) pedirSello();
-  else mostrarZona("Arrastra aquí el documento laboral", "o pulsa «Cargar documentos laborales»", () => $("input-documento").click());
+  else mostrarZona(TEXTOS.zonaTitulo, TEXTOS.zonaSubtitulo, () => $("input-documento").click());
   $("btn-descargar").disabled = true;
   actualizarDatos();
   ponerEstado("");
@@ -121,12 +140,12 @@ function mostrarZona(titulo, subtitulo, accion) {
 
 function pedirFirma() {
   ponerEstado("Este documento no está firmado: carga la firma y se aplicará automáticamente.");
-  mostrarZona("Este documento no está firmado", "Pulsa «Cargar firma» (PDF firmado o captura) o pega una captura con Ctrl+V", () => $("input-firma").click());
+  mostrarZona("Este documento no está firmado", TEXTOS.pedirFirma, () => $("input-firma").click());
 }
 
 function pedirSello() {
-  ponerEstado("Falta el sello de la empresa. Solo hay que cargarlo la primera vez en este ordenador.");
-  mostrarZona("Carga el sello de la empresa", "Pulsa aquí y elige la imagen del sello (solo la primera vez en este ordenador)", () => $("input-sello").click());
+  ponerEstado("Falta el sello de la empresa. Solo hay que cargarlo la primera vez en este dispositivo.");
+  mostrarZona("Carga el sello de la empresa", "Pulsa aquí y elige la imagen del sello (solo la primera vez en este dispositivo)", () => $("input-sello").click());
 }
 
 const esperandoFirma = () => estado.documento && !estado.resultado && estado.sello;
@@ -209,7 +228,7 @@ async function cambiarFecha() {
     await alerta("Error inesperado", `No se ha podido cambiar la fecha:\n${error}`);
   }
   mostrarPrevias();
-  ponerEstado("Listo. Pulsa Descargar, o pincha en una hoja para descargar solo esa.");
+  ponerEstado(TEXTOS.listo);
   await avisarFecha();
 }
 
@@ -239,7 +258,7 @@ function actualizarDatos() {
     $("quitar-firma").hidden = false;
   } else {
     img.hidden = true;
-    texto.textContent = resultado ? "Firma: la del propio documento" : "Firma: la del documento, o pulsa «Cargar firma» / pega una captura con Ctrl+V";
+    texto.textContent = resultado ? "Firma: la del propio documento" : TEXTOS.sinFirma;
     texto.className = "pequeno suave";
     $("quitar-firma").hidden = true;
   }
@@ -317,10 +336,11 @@ function colocarPila() {
   const n = resultado.hojas.length;
   const altoDisponible = pila.clientHeight - 12;
   const altoHoja = altoDisponible / (1 + DESFASE_PACK * (n - 1));
-  const ancho = Math.max(120, Math.min(ANCHO_MAX_PACK, (altoHoja * 595) / 842));
+  const ancho = Math.max(100, Math.min(ANCHO_MAX_PACK, (altoHoja * 595) / 842, pila.clientWidth - RESERVA_ETIQUETAS_PACK));
   const alto = (ancho * 842) / 595;
   const desfase = alto * DESFASE_PACK;
-  const x0 = (pila.clientWidth - ancho) / 2;
+  // Centrada, pero sin que las etiquetas de la derecha se salgan en pantallas estrechas.
+  const x0 = Math.max(0, Math.min((pila.clientWidth - ancho) / 2, pila.clientWidth - ancho - RESERVA_ETIQUETAS_PACK));
   const y0 = Math.max(4, (pila.clientHeight - alto - desfase * (n - 1)) / 2);
   const resolucion = Math.round(ancho * (window.devicePixelRatio || 1));
 
