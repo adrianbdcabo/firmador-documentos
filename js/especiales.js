@@ -1,7 +1,9 @@
 // Documentos especiales de plataformas: plantillas que se rellenan con los datos del trabajador.
 //
 // Para añadir uno nuevo basta con copiar su plantilla en plantillas/ y añadir aquí su ficha:
-// el texto del botón, el archivo, la página que se rellena y dónde va cada dato.
+// el texto del botón, el archivo, la página que se rellena y dónde va cada dato. Si una plataforma
+// pide varios documentos, su ficha lleva "documentos": una lista con plantilla, archivo, página y
+// campos de cada uno, y el botón los descarga todos.
 // Las coordenadas son las de MuPDF (origen arriba a la izquierda) y la "y" es la línea base del texto.
 // Cada texto puede llevar "fuente" (una de las 14 estándar de PDF; por defecto Helvetica) y
 // "centrado": true, y entonces la "x" es el centro del texto en vez de su inicio. Con "lineas": N
@@ -13,6 +15,7 @@ import { anadirContenido, anadirRecurso, aPdf, guardar, mupdf, numero } from "./
 const TAMANO_MINIMO = 6; // si el texto no cabe, se encoge hasta aquí
 
 const dosCifras = (n) => String(n).padStart(2, "0");
+const fechaCorta = (fecha) => `${dosCifras(fecha.getDate())}/${dosCifras(fecha.getMonth() + 1)}/${fecha.getFullYear()}`;
 
 export const ESPECIALES = [
   {
@@ -77,7 +80,7 @@ export const ESPECIALES = [
       { valor: (d) => d.trabajador, x: 54.4, y: 722.5, tamano: 10.5, ancho: 222 },
       { valor: (d) => d.dni, x: 279.5, y: 711.1, tamano: 10.5, ancho: 90, fuente: "Helvetica-Bold" },
       {
-        valor: (d) => `${dosCifras(d.fecha.getDate())}/${dosCifras(d.fecha.getMonth() + 1)}/${d.fecha.getFullYear()}`,
+        valor: (d) => fechaCorta(d.fecha),
         x: 371.7, y: 710, tamano: 10, ancho: 62, fuente: "Times-Roman",
       },
       { imagen: (d) => d.firma, x: 436.6, y: 689.2, ancho: 117.5, alto: 52.1 },
@@ -90,7 +93,7 @@ export const ESPECIALES = [
     archivo: (datos) => `DOCU ESPECIAL THALES - ${datos.trabajador}.pdf`,
     pagina: 0, // la hoja es apaisada
     campos: [
-      { valor: (d) => `${dosCifras(d.fecha.getDate())}/${dosCifras(d.fecha.getMonth() + 1)}/${d.fecha.getFullYear()}`, x: 718.9, y: 150.3, tamano: 9, ancho: 92 },
+      { valor: (d) => fechaCorta(d.fecha), x: 718.9, y: 150.3, tamano: 9, ancho: 92 },
       // Primera fila de la tabla: nombre, DNI/NIE, puesto (hasta tres líneas, como la columna de EPIS) y firma
       { valor: (d) => d.trabajador, x: 27.3, y: 315.7, tamano: 9, ancho: 144, lineas: 3, interlineado: 10.8 },
       { valor: (d) => d.dni, x: 176.7, y: 315.7, tamano: 9, ancho: 94 },
@@ -98,7 +101,39 @@ export const ESPECIALES = [
       { imagen: (d) => d.firma, x: 680.2, y: 306.7, ancho: 83, alto: 34.3 },
     ],
   },
+  {
+    // Dos documentos: el recibí de la normativa de seguridad y la información de riesgos
+    id: "sandoz",
+    boton: "SANDOZ",
+    documentos: [
+      {
+        plantilla: "plantillas/sandoz-recibi.pdf",
+        archivo: (datos) => `RECIBI SANDOZ - ${datos.trabajador}.pdf`,
+        pagina: -1,
+        campos: [
+          { imagen: (d) => d.firma, x: 131.2, y: 81, ancho: 57, alto: 23.8 },
+          { valor: (d) => d.trabajador, x: 193.8, y: 120.6, tamano: 9, ancho: 340 },
+          { valor: (d) => fechaCorta(d.fecha), x: 126.1, y: 182.9, tamano: 9, ancho: 150 },
+        ],
+      },
+      {
+        plantilla: "plantillas/sandoz-info.pdf",
+        archivo: (datos) => `INFO SANDOZ - ${datos.trabajador}.pdf`,
+        pagina: 0,
+        campos: [
+          { valor: (d) => fechaCorta(d.fecha), x: 144.4, y: 649.3, tamano: 9, ancho: 100 },
+          { imagen: (d) => d.firma, x: 254.8, y: 654.4, ancho: 57, alto: 23.8 },
+          { imagen: (d) => d.sello, x: 370.7, y: 657.1, ancho: 87, alto: 64.5 }, // siempre lleva el sello
+        ],
+      },
+    ],
+  },
 ];
+
+/** Los documentos que descarga el botón de una plataforma (casi siempre, uno). */
+export function documentosDe(especial) {
+  return especial.documentos ?? [especial];
+}
 
 /** PDF de un documento especial relleno con los datos del trabajador. */
 export function generar(especial, plantilla, datos) {

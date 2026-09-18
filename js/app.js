@@ -1,6 +1,6 @@
 // Interfaz: cargar el documento laboral (y, si hace falta, la firma y el sello), previsualizar y descargar.
 
-import { ESPECIALES, generar } from "./especiales.js";
+import { documentosDe, ESPECIALES, generar } from "./especiales.js";
 import { fechaDeHoy } from "./fecha.js";
 import * as firmas from "./firma.js";
 import { ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
@@ -449,8 +449,12 @@ async function descargarEspecial(especial) {
     fecha: new Date(),
   };
   try {
-    const pdf = generar(especial, await plantillaDe(especial.plantilla), datos);
-    await descargar([[especial.archivo(datos), pdf]]);
+    datos.sello = await cargarSello();
+    const archivos = [];
+    for (const documento of documentosDe(especial)) {
+      archivos.push([documento.archivo(datos), generar(documento, await plantillaDe(documento.plantilla), datos)]);
+    }
+    await descargar(archivos);
   } catch (error) {
     ponerEstado("");
     await alerta("No se ha podido preparar el documento", `${especial.boton}: ${error.message ?? error}`);
@@ -464,7 +468,10 @@ function crearBotonesEspeciales() {
     boton.type = "button";
     boton.className = "boton secundario";
     boton.textContent = especial.boton;
-    boton.title = `Descargar el documento de ${especial.boton} relleno con los datos del trabajador`;
+    const cuantos = documentosDe(especial).length;
+    boton.title = cuantos > 1
+      ? `Descargar los ${cuantos} documentos de ${especial.boton} rellenos con los datos del trabajador`
+      : `Descargar el documento de ${especial.boton} relleno con los datos del trabajador`;
     boton.addEventListener("click", () => descargarEspecial(especial));
     contenedor.append(boton);
   }

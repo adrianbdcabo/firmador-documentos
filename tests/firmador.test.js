@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 
-import { ESPECIALES, generar } from "../js/especiales.js";
+import { documentosDe, ESPECIALES, generar } from "../js/especiales.js";
 import { fechaDeHoy } from "../js/fecha.js";
 import { deHojaSuelta, desdeImagen, desdePdf } from "../js/firma.js";
 import { ErrorProcesado, FirmaNoEncontrada, firmante, procesar } from "../js/pdf.js";
@@ -246,11 +246,33 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     }
   });
 
+  test("SANDOZ descarga dos documentos: el recibí y la información de riesgos con el sello", () => {
+    const resultado = procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, puesto: resultado.puesto, firma: resultado.firma, sello: SELLO, fecha: new Date(2026, 8, 18) };
+    const [recibi, info] = documentosDe(ESPECIALES.find((e) => e.id === "sandoz"));
+    assert.equal(recibi.archivo(datos), `RECIBI SANDOZ - ${resultado.trabajador}.pdf`);
+    assert.equal(info.archivo(datos), `INFO SANDOZ - ${resultado.trabajador}.pdf`);
+    for (const [documento, paginas, esperados, conSello] of [
+      [recibi, 4, [resultado.trabajador, "18/09/2026"], false],
+      [info, 1, ["18/09/2026"], true],
+    ]) {
+      const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${documento.plantilla}`, import.meta.url)));
+      const pdf = generar(documento, plantilla, datos);
+      const doc = new mupdf.PDFDocument(pdf);
+      assert.equal(doc.countPages(), paginas);
+      const pagina = documento.pagina < 0 ? paginas + documento.pagina : documento.pagina;
+      const lineas = doc.loadPage(pagina).toStructuredText().asText().split("\n").map((l) => l.trim());
+      for (const esperado of esperados) assert.ok(lineas.includes(esperado), `${documento.archivo(datos)}: falta "${esperado}"`);
+      assert.ok(llevaImagen(pdf, datos.firma, pagina), "lleva la firma");
+      assert.equal(llevaImagen(pdf, SELLO, pagina), conSello, "sello");
+    }
+  });
+
   test("en los documentos especiales un nombre o puesto larguísimo no se sale de su hueco", () => {
     const largo = "MARIA DEL CARMEN FERNANDEZ DE LA HOZ ECHEVARRIA GUTIERREZ";
     const puesto = "AYUDANTE DE COCINA Y MANTENIMIENTO DE INSTALACIONES DEPORTIVAS";
     const datos = { trabajador: largo, dni: "12345678Z", puesto, fecha: new Date(2027, 1, 28), firma: null };
-    for (const especial of ESPECIALES) {
+    for (const especial of ESPECIALES.flatMap((e) => documentosDe(e).map((d) => ({ ...d, boton: e.boton })))) {
       const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
       const doc = new mupdf.PDFDocument(generar(especial, plantilla, datos));
       const indice = especial.pagina < 0 ? doc.countPages() + especial.pagina : especial.pagina;
