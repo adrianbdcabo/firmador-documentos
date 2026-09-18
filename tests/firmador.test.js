@@ -239,10 +239,6 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       for (const esperado of [resultado.trabajador, resultado.dni, ...esperados]) {
         assert.ok(lineas.includes(esperado), `${id}: falta "${esperado}"`);
       }
-      // Los datos que traía la plantilla de otro trabajador ya no están
-      for (const viejo of ["MONICA ACEITUNO GIL", "04233082R", "11 de Septiembre de", "11 de Septiembre de 2026"]) {
-        assert.ok(!lineas.includes(viejo), `${id}: sigue estando "${viejo}"`);
-      }
       assert.ok(llevaImagen(pdf, datos.firma, 0), `${id}: lleva la firma del trabajador`);
     }
   });

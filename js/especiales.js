@@ -3,7 +3,6 @@
 // Para añadir uno nuevo basta con copiar su plantilla en plantillas/ y añadir aquí su ficha:
 // el texto del botón, el archivo, la página que se rellena y dónde va cada dato.
 // Las coordenadas son las de MuPDF (origen arriba a la izquierda) y la "y" es la línea base del texto.
-// "borrar" son zonas de la plantilla cuyo texto se quita antes de rellenar (datos de otro trabajador).
 // Cada texto puede llevar "fuente" (una de las 14 estándar de PDF; por defecto Helvetica) y
 // "centrado": true, y entonces la "x" es el centro del texto en vez de su inicio.
 
@@ -38,13 +37,6 @@ export const ESPECIALES = [
     plantilla: "plantillas/real-madrid.pdf",
     archivo: (datos) => `DOCU ESPECIAL REAL MADRID - ${datos.trabajador}.pdf`,
     pagina: 0,
-    // La plantilla trae rellena la primera fila y la fecha de arriba: se quitan y se escriben las de hoy
-    borrar: [
-      [30, 330, 232, 364], // nombre
-      [236, 330, 330, 364], // DNI
-      [334, 330, 413, 364], // fecha de entrega
-      [330, 162, 520, 173], // fecha bajo "Firma y sello"
-    ],
     campos: [
       { valor: (d) => fechaDeHoy(d.fecha), x: 332, y: 169.9, tamano: 8, ancho: 180 },
       { valor: (d) => d.trabajador, x: 131.5, y: 349.8, tamano: 9, ancho: 196, centrado: true },
@@ -79,10 +71,6 @@ export function generar(especial, plantilla, datos) {
   try {
     const indice = especial.pagina < 0 ? doc.countPages() + especial.pagina : especial.pagina;
     const pagina = doc.loadPage(indice);
-    if (especial.borrar?.length) {
-      for (const rect of especial.borrar) pagina.createAnnotation("Redact").setRect(rect);
-      pagina.applyRedactions(false, mupdf.PDFPage.REDACT_IMAGE_NONE, mupdf.PDFPage.REDACT_LINE_ART_NONE, mupdf.PDFPage.REDACT_TEXT_REMOVE);
-    }
     const objetoPagina = pagina.getObject();
 
     // Solo fuentes de las 14 estándar, que todo lector de PDF tiene
