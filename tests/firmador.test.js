@@ -216,7 +216,7 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     assert.ok(linea.bbox[2] - linea.bbox[0] <= 200, `el nombre largo cabe (mide ${(linea.bbox[2] - linea.bbox[0]).toFixed(0)} pt)`);
   });
 
-  test("documentos especiales de REAL MADRID y ATLETI rellenos", () => {
+  test("documentos especiales de REAL MADRID, ATLETI y CUN MADRID rellenos", () => {
     const resultado = procesar(leer(DOCS["51143385X"].archivo), { sello: SELLO });
     const datos = {
       trabajador: resultado.trabajador,
@@ -228,6 +228,7 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     for (const [id, paginas, archivo, esperados] of [
       ["real-madrid", 1, "REAL MADRID", ["18 de Septiembre de 2026", "18 de Septiembre de", "2026"]],
       ["atleti", 2, "ATLETI", ["18/09/2026"]],
+      ["cun-madrid", 8, "CUN MADRID", ["18", "SEPTIEMBRE", "26"]],
     ]) {
       const especial = ESPECIALES.find((e) => e.id === id);
       assert.equal(especial.archivo(datos), `DOCU ESPECIAL ${archivo} - ${resultado.trabajador}.pdf`);
@@ -235,11 +236,39 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       const pdf = generar(especial, plantilla, datos);
       const doc = new mupdf.PDFDocument(pdf);
       assert.equal(doc.countPages(), paginas, `${id}: páginas`);
-      const lineas = doc.loadPage(0).toStructuredText().asText().split("\n").map((l) => l.trim());
+      const pagina = especial.pagina < 0 ? doc.countPages() + especial.pagina : especial.pagina;
+      const lineas = doc.loadPage(pagina).toStructuredText().asText().split("\n").map((l) => l.trim());
       for (const esperado of [resultado.trabajador, resultado.dni, ...esperados]) {
         assert.ok(lineas.includes(esperado), `${id}: falta "${esperado}"`);
       }
-      assert.ok(llevaImagen(pdf, datos.firma, 0), `${id}: lleva la firma del trabajador`);
+      assert.ok(llevaImagen(pdf, datos.firma, pagina), `${id}: lleva la firma del trabajador`);
+    }
+  });
+
+  test("en los documentos especiales un nombre larguísimo no se sale de su hueco", () => {
+    const largo = "MARIA DEL CARMEN FERNANDEZ DE LA HOZ ECHEVARRIA GUTIERREZ";
+    const datos = { trabajador: largo, dni: "12345678Z", fecha: new Date(2027, 1, 28), firma: null };
+    for (const especial of ESPECIALES) {
+      const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
+      const doc = new mupdf.PDFDocument(generar(especial, plantilla, datos));
+      const indice = especial.pagina < 0 ? doc.countPages() + especial.pagina : especial.pagina;
+      const huecos = especial.campos.filter((c) => c.valor && c.valor(datos) === largo)
+        .map((c) => (c.centrado ? [c.x - c.ancho / 2, c.x + c.ancho / 2] : [c.x, c.x + c.ancho]));
+      const tramos = [];
+      doc.loadPage(indice).toStructuredText().walk({
+        beginLine() { this.c = []; },
+        onChar(c, _o, _f, _s, quad) { this.c.push([c, quad[0], quad[2]]); },
+        endLine() {
+          const k = this.c.map((x) => x[0]).join("").indexOf(largo);
+          if (k >= 0) tramos.push([this.c[k][1], this.c[k + largo.length - 1][2]]);
+        },
+      });
+      assert.equal(tramos.length, huecos.length, `${especial.boton}: el nombre sale en todos sus huecos`);
+      tramos.sort((a, b) => a[0] - b[0]);
+      huecos.sort((a, b) => a[0] - b[0]);
+      tramos.forEach(([ini, fin], i) => {
+        assert.ok(ini >= huecos[i][0] - 0.5 && fin <= huecos[i][1] + 0.5, `${especial.boton}: ${ini.toFixed(1)}-${fin.toFixed(1)} fuera de ${huecos[i]}`);
+      });
     }
   });
 

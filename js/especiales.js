@@ -32,6 +32,25 @@ export const ESPECIALES = [
     ],
   },
   {
+    // Mismo formulario que IESE MADRID (Universidad de Navarra), con los huecos en otro sitio
+    id: "cun-madrid",
+    boton: "CUN MADRID",
+    plantilla: "plantillas/cun-madrid.pdf",
+    archivo: (datos) => `DOCU ESPECIAL CUN MADRID - ${datos.trabajador}.pdf`,
+    pagina: -1,
+    campos: [
+      // Huecos entre "a" (x=374,3) y "de" (389,8), hasta el "de" (480,4) y tras "20" (501,5)
+      { valor: (d) => String(d.fecha.getDate()), x: 376.8, y: 207.2, tamano: 9, ancho: 12.5 },
+      { valor: (d) => MESES[d.fecha.getMonth()].toUpperCase(), x: 412.1, y: 207.2, tamano: 9, ancho: 66 },
+      { valor: (d) => String(d.fecha.getFullYear()).slice(-2), x: 502.1, y: 207.2, tamano: 9, ancho: 12 },
+      // El nombre acaba donde empieza "con D.N.I. nº" (x=251,5)
+      { valor: (d) => d.trabajador, x: 103.7, y: 276.7, tamano: 9, ancho: 146 },
+      { valor: (d) => d.dni, x: 317.2, y: 276.7, tamano: 9, ancho: 70 },
+      { valor: (d) => d.trabajador, x: 71.7, y: 659.6, tamano: 9, ancho: 195 },
+      { imagen: (d) => d.firma, x: 269.3, y: 649.9, ancho: 86, alto: 33.5 },
+    ],
+  },
+  {
     id: "real-madrid",
     boton: "REAL MADRID",
     plantilla: "plantillas/real-madrid.pdf",
@@ -94,9 +113,13 @@ export function generar(especial, plantilla, datos) {
       if (!texto) continue;
       const { fuente, recurso } = fuenteDe(campo.fuente);
       const tamano = tamanoQueCabe(fuente, texto, campo.tamano, campo.ancho);
-      const inicio = campo.centrado ? campo.x - anchoDelTexto(fuente, texto, tamano) / 2 : campo.x;
+      // Si ni con la letra más pequeña cabe, se estrecha el texto hasta que quepa
+      const anchoTexto = anchoDelTexto(fuente, texto, tamano);
+      const estrechar = Math.min(1, campo.ancho / anchoTexto);
+      const inicio = campo.centrado ? campo.x - (anchoTexto * estrechar) / 2 : campo.x;
       const [x, y] = aPdf(pagina, [inicio, campo.y]);
-      operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf 1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escapar(texto)}) Tj ET Q`);
+      const tz = estrechar < 1 ? `${numero(estrechar * 100)} Tz ` : "";
+      operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf ${tz}1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escapar(texto)}) Tj ET Q`);
     }
     anadirContenido(doc, objetoPagina, operadores.join("\n"));
     return guardar(doc);
