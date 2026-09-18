@@ -216,7 +216,7 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     assert.ok(linea.bbox[2] - linea.bbox[0] <= 200, `el nombre largo cabe (mide ${(linea.bbox[2] - linea.bbox[0]).toFixed(0)} pt)`);
   });
 
-  test("documentos especiales de REAL MADRID, ATLETI y CUN MADRID rellenos", () => {
+  test("documentos especiales de REAL MADRID, ATLETI, CUN MADRID y THALES rellenos", () => {
     const resultado = procesar(leer(DOCS["51143385X"].archivo), { sello: SELLO });
     const datos = {
       trabajador: resultado.trabajador,
@@ -229,6 +229,7 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       ["real-madrid", 1, "REAL MADRID", ["18 de Septiembre de 2026", "18 de Septiembre de", "2026"]],
       ["atleti", 2, "ATLETI", ["18/09/2026"]],
       ["cun-madrid", 8, "CUN MADRID", ["18", "SEPTIEMBRE", "26"]],
+      ["thales", 2, "THALES", ["18/09/2026", resultado.puesto]],
     ]) {
       const especial = ESPECIALES.find((e) => e.id === id);
       assert.equal(especial.archivo(datos), `DOCU ESPECIAL ${archivo} - ${resultado.trabajador}.pdf`);
@@ -245,30 +246,27 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     }
   });
 
-  test("en los documentos especiales un nombre larguísimo no se sale de su hueco", () => {
+  test("en los documentos especiales un nombre o puesto larguísimo no se sale de su hueco", () => {
     const largo = "MARIA DEL CARMEN FERNANDEZ DE LA HOZ ECHEVARRIA GUTIERREZ";
-    const datos = { trabajador: largo, dni: "12345678Z", fecha: new Date(2027, 1, 28), firma: null };
+    const puesto = "AYUDANTE DE COCINA Y MANTENIMIENTO DE INSTALACIONES DEPORTIVAS";
+    const datos = { trabajador: largo, dni: "12345678Z", puesto, fecha: new Date(2027, 1, 28), firma: null };
     for (const especial of ESPECIALES) {
       const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
       const doc = new mupdf.PDFDocument(generar(especial, plantilla, datos));
       const indice = especial.pagina < 0 ? doc.countPages() + especial.pagina : especial.pagina;
-      const huecos = especial.campos.filter((c) => c.valor && c.valor(datos) === largo)
-        .map((c) => (c.centrado ? [c.x - c.ancho / 2, c.x + c.ancho / 2] : [c.x, c.x + c.ancho]));
-      const tramos = [];
-      doc.loadPage(indice).toStructuredText().walk({
-        beginLine() { this.c = []; },
-        onChar(c, _o, _f, _s, quad) { this.c.push([c, quad[0], quad[2]]); },
-        endLine() {
-          const k = this.c.map((x) => x[0]).join("").indexOf(largo);
-          if (k >= 0) tramos.push([this.c[k][1], this.c[k + largo.length - 1][2]]);
-        },
-      });
-      assert.equal(tramos.length, huecos.length, `${especial.boton}: el nombre sale en todos sus huecos`);
-      tramos.sort((a, b) => a[0] - b[0]);
-      huecos.sort((a, b) => a[0] - b[0]);
-      tramos.forEach(([ini, fin], i) => {
-        assert.ok(ini >= huecos[i][0] - 0.5 && fin <= huecos[i][1] + 0.5, `${especial.boton}: ${ini.toFixed(1)}-${fin.toFixed(1)} fuera de ${huecos[i]}`);
-      });
+      const lineas = lineasDeTexto(doc.loadPage(indice));
+      for (const campo of especial.campos.filter((c) => c.valor && [largo, puesto].includes(c.valor(datos)))) {
+        const [izquierda, derecha] = campo.centrado ? [campo.x - campo.ancho / 2, campo.x + campo.ancho / 2] : [campo.x, campo.x + campo.ancho];
+        const alto = (campo.lineas ?? 1) * (campo.interlineado ?? campo.tamano * 1.2);
+        // Las líneas de este campo: las que caen en su hueco y están formadas por palabras del texto
+        const palabras = new Set(campo.valor(datos).split(" "));
+        const suyas = lineas.filter((l) => l.bbox[1] > campo.y - campo.tamano - 2 && l.bbox[1] < campo.y + alto - campo.tamano &&
+          l.bbox[0] >= izquierda - 0.5 && l.bbox[0] < derecha &&
+          l.chars.map((c) => c.c).join("").trim().split(/\s+/).every((p) => palabras.has(p)));
+        const texto = suyas.map((l) => l.chars.map((c) => c.c).join("").trim()).join(" ");
+        assert.equal(texto, campo.valor(datos), `${especial.boton}: el texto sale entero`);
+        for (const l of suyas) assert.ok(l.bbox[2] <= derecha + 0.5, `${especial.boton}: acaba en ${l.bbox[2].toFixed(1)}, el hueco en ${derecha.toFixed(1)}`);
+      }
     }
   });
 

@@ -39,7 +39,7 @@ guardan en ningún sitio.
    dónde va cada dato (coordenadas de MuPDF, con la "y" en la línea base del texto, y el
    ancho del hueco para que el texto se encoja si no cabe).
 
-Ahora mismo hay cuatro: IESE MADRID, CUN MADRID, REAL MADRID y ATLETI (el orden de los
+Ahora mismo hay cinco: IESE MADRID, CUN MADRID, REAL MADRID, ATLETI y THALES (el orden de los
 botones es el de la lista en `js/especiales.js`).
 
 ## Desarrollo

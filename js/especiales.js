@@ -4,7 +4,8 @@
 // el texto del botón, el archivo, la página que se rellena y dónde va cada dato.
 // Las coordenadas son las de MuPDF (origen arriba a la izquierda) y la "y" es la línea base del texto.
 // Cada texto puede llevar "fuente" (una de las 14 estándar de PDF; por defecto Helvetica) y
-// "centrado": true, y entonces la "x" es el centro del texto en vez de su inicio.
+// "centrado": true, y entonces la "x" es el centro del texto en vez de su inicio. Con "lineas": N
+// el texto se parte por palabras en hasta N líneas si no cabe en una ("interlineado", distancia entre ellas).
 
 import { fechaDeHoy, MESES } from "./fecha.js";
 import { anadirContenido, anadirRecurso, aPdf, guardar, mupdf, numero } from "./pdfutil.js";
@@ -82,6 +83,21 @@ export const ESPECIALES = [
       { imagen: (d) => d.firma, x: 436.6, y: 689.2, ancho: 117.5, alto: 52.1 },
     ],
   },
+  {
+    id: "thales",
+    boton: "THALES",
+    plantilla: "plantillas/thales.pdf",
+    archivo: (datos) => `DOCU ESPECIAL THALES - ${datos.trabajador}.pdf`,
+    pagina: 0, // la hoja es apaisada
+    campos: [
+      { valor: (d) => `${dosCifras(d.fecha.getDate())}/${dosCifras(d.fecha.getMonth() + 1)}/${d.fecha.getFullYear()}`, x: 718.9, y: 150.3, tamano: 9, ancho: 92 },
+      // Primera fila de la tabla: nombre, DNI/NIE, puesto (hasta tres líneas, como la columna de EPIS) y firma
+      { valor: (d) => d.trabajador, x: 27.3, y: 315.7, tamano: 9, ancho: 144, lineas: 3, interlineado: 10.8 },
+      { valor: (d) => d.dni, x: 176.7, y: 315.7, tamano: 9, ancho: 94 },
+      { valor: (d) => d.puesto, x: 274.7, y: 315.7, tamano: 9, ancho: 95, lineas: 3, interlineado: 10.8 },
+      { imagen: (d) => d.firma, x: 680.2, y: 306.7, ancho: 83, alto: 34.3 },
+    ],
+  },
 ];
 
 /** PDF de un documento especial relleno con los datos del trabajador. */
@@ -112,14 +128,16 @@ export function generar(especial, plantilla, datos) {
       const texto = (campo.valor(datos) ?? "").trim();
       if (!texto) continue;
       const { fuente, recurso } = fuenteDe(campo.fuente);
-      const tamano = tamanoQueCabe(fuente, texto, campo.tamano, campo.ancho);
-      // Si ni con la letra más pequeña cabe, se estrecha el texto hasta que quepa
-      const anchoTexto = anchoDelTexto(fuente, texto, tamano);
-      const estrechar = Math.min(1, campo.ancho / anchoTexto);
-      const inicio = campo.centrado ? campo.x - (anchoTexto * estrechar) / 2 : campo.x;
-      const [x, y] = aPdf(pagina, [inicio, campo.y]);
-      const tz = estrechar < 1 ? `${numero(estrechar * 100)} Tz ` : "";
-      operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf ${tz}1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escapar(texto)}) Tj ET Q`);
+      const { tamano, lineas } = repartir(fuente, texto, campo);
+      lineas.forEach((linea, i) => {
+        // Si ni con la letra más pequeña cabe, se estrecha el texto hasta que quepa
+        const anchoTexto = anchoDelTexto(fuente, linea, tamano);
+        const estrechar = Math.min(1, campo.ancho / anchoTexto);
+        const inicio = campo.centrado ? campo.x - (anchoTexto * estrechar) / 2 : campo.x;
+        const [x, y] = aPdf(pagina, [inicio, campo.y + i * (campo.interlineado ?? tamano * 1.2)]);
+        const tz = estrechar < 1 ? `${numero(estrechar * 100)} Tz ` : "";
+        operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf ${tz}1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escapar(linea)}) Tj ET Q`);
+      });
     }
     anadirContenido(doc, objetoPagina, operadores.join("\n"));
     return guardar(doc);
@@ -144,6 +162,32 @@ function anchoDelTexto(fuente, texto, tamano) {
   let total = 0;
   for (const caracter of texto) total += fuente.advanceGlyph(fuente.encodeCharacter(caracter.codePointAt(0)));
   return total * tamano;
+}
+
+/**
+ * Reparte el texto en las líneas que admite el campo ("lineas", 1 por defecto) y encoge la
+ * letra lo justo para que quepa. Si ni así cabe, lo que sobra va en la última línea.
+ */
+function repartir(fuente, texto, campo) {
+  const maximo = campo.lineas ?? 1;
+  if (maximo === 1) return { tamano: tamanoQueCabe(fuente, texto, campo.tamano, campo.ancho), lineas: [texto] };
+  for (let tamano = campo.tamano; tamano >= TAMANO_MINIMO; tamano -= 0.25) {
+    const lineas = partir(fuente, texto, tamano, campo.ancho);
+    if (lineas.length <= maximo && lineas.every((l) => anchoDelTexto(fuente, l, tamano) <= campo.ancho)) return { tamano, lineas };
+  }
+  const lineas = partir(fuente, texto, TAMANO_MINIMO, campo.ancho);
+  return { tamano: TAMANO_MINIMO, lineas: [...lineas.slice(0, maximo - 1), lineas.slice(maximo - 1).join(" ")] };
+}
+
+/** Parte el texto por palabras en líneas que no pasen del ancho. */
+function partir(fuente, texto, tamano, ancho) {
+  const lineas = [];
+  for (const palabra of texto.split(/\s+/)) {
+    const ultima = lineas.at(-1);
+    if (ultima !== undefined && anchoDelTexto(fuente, `${ultima} ${palabra}`, tamano) <= ancho) lineas[lineas.length - 1] = `${ultima} ${palabra}`;
+    else lineas.push(palabra);
+  }
+  return lineas;
 }
 
 /** Encoge la letra lo justo para que el texto quepa en su hueco (nombres muy largos). */
