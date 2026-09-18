@@ -216,6 +216,37 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     assert.ok(linea.bbox[2] - linea.bbox[0] <= 200, `el nombre largo cabe (mide ${(linea.bbox[2] - linea.bbox[0]).toFixed(0)} pt)`);
   });
 
+  test("documentos especiales de REAL MADRID y ATLETI rellenos", () => {
+    const resultado = procesar(leer(DOCS["51143385X"].archivo), { sello: SELLO });
+    const datos = {
+      trabajador: resultado.trabajador,
+      dni: resultado.dni,
+      puesto: resultado.puesto,
+      firma: resultado.firma,
+      fecha: new Date(2026, 8, 18),
+    };
+    for (const [id, paginas, archivo, esperados] of [
+      ["real-madrid", 1, "REAL MADRID", ["18 de Septiembre de 2026", "18 de Septiembre de", "2026"]],
+      ["atleti", 2, "ATLETI", ["18/09/2026"]],
+    ]) {
+      const especial = ESPECIALES.find((e) => e.id === id);
+      assert.equal(especial.archivo(datos), `DOCU ESPECIAL ${archivo} - ${resultado.trabajador}.pdf`);
+      const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
+      const pdf = generar(especial, plantilla, datos);
+      const doc = new mupdf.PDFDocument(pdf);
+      assert.equal(doc.countPages(), paginas, `${id}: páginas`);
+      const lineas = doc.loadPage(0).toStructuredText().asText().split("\n").map((l) => l.trim());
+      for (const esperado of [resultado.trabajador, resultado.dni, ...esperados]) {
+        assert.ok(lineas.includes(esperado), `${id}: falta "${esperado}"`);
+      }
+      // Los datos que traía la plantilla de otro trabajador ya no están
+      for (const viejo of ["MONICA ACEITUNO GIL", "04233082R", "11 de Septiembre de", "11 de Septiembre de 2026"]) {
+        assert.ok(!lineas.includes(viejo), `${id}: sigue estando "${viejo}"`);
+      }
+      assert.ok(llevaImagen(pdf, datos.firma, 0), `${id}: lleva la firma del trabajador`);
+    }
+  });
+
   test("formato de la fecha de hoy", () => {
     assert.equal(fechaDeHoy(new Date(2026, 9, 5)), "5 de Octubre de 2026");
     assert.equal(fechaDeHoy(new Date(2027, 2, 17)), "17 de Marzo de 2027");

@@ -3,11 +3,16 @@
 // Para añadir uno nuevo basta con copiar su plantilla en plantillas/ y añadir aquí su ficha:
 // el texto del botón, el archivo, la página que se rellena y dónde va cada dato.
 // Las coordenadas son las de MuPDF (origen arriba a la izquierda) y la "y" es la línea base del texto.
+// "borrar" son zonas de la plantilla cuyo texto se quita antes de rellenar (datos de otro trabajador).
+// Cada texto puede llevar "fuente" (una de las 14 estándar de PDF; por defecto Helvetica) y
+// "centrado": true, y entonces la "x" es el centro del texto en vez de su inicio.
 
-import { MESES } from "./fecha.js";
+import { fechaDeHoy, MESES } from "./fecha.js";
 import { anadirContenido, anadirRecurso, aPdf, guardar, mupdf, numero } from "./pdfutil.js";
 
 const TAMANO_MINIMO = 6; // si el texto no cabe, se encoge hasta aquí
+
+const dosCifras = (n) => String(n).padStart(2, "0");
 
 export const ESPECIALES = [
   {
@@ -27,6 +32,45 @@ export const ESPECIALES = [
       { imagen: (d) => d.firma, x: 269.6, y: 634.2, ancho: 102, alto: 40.3 },
     ],
   },
+  {
+    id: "real-madrid",
+    boton: "REAL MADRID",
+    plantilla: "plantillas/real-madrid.pdf",
+    archivo: (datos) => `DOCU ESPECIAL REAL MADRID - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    // La plantilla trae rellena la primera fila y la fecha de arriba: se quitan y se escriben las de hoy
+    borrar: [
+      [30, 330, 232, 364], // nombre
+      [236, 330, 330, 364], // DNI
+      [334, 330, 413, 364], // fecha de entrega
+      [330, 162, 520, 173], // fecha bajo "Firma y sello"
+    ],
+    campos: [
+      { valor: (d) => fechaDeHoy(d.fecha), x: 332, y: 169.9, tamano: 8, ancho: 180 },
+      { valor: (d) => d.trabajador, x: 131.5, y: 349.8, tamano: 9, ancho: 196, centrado: true },
+      { valor: (d) => d.dni, x: 283.5, y: 349.8, tamano: 9, ancho: 88, centrado: true },
+      // La fecha de entrega va en dos líneas, como en la plantilla
+      { valor: (d) => fechaDeHoy(d.fecha).replace(/ \d{4}$/, ""), x: 374, y: 342.3, tamano: 7, ancho: 78, centrado: true },
+      { valor: (d) => String(d.fecha.getFullYear()), x: 374, y: 355.8, tamano: 7, ancho: 78, centrado: true },
+      { imagen: (d) => d.firma, x: 417.1, y: 331.9, ancho: 69, alto: 30.2 },
+    ],
+  },
+  {
+    id: "atleti",
+    boton: "ATLETI",
+    plantilla: "plantillas/atleti.pdf",
+    archivo: (datos) => `DOCU ESPECIAL ATLETI - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      { valor: (d) => d.trabajador, x: 54.4, y: 722.5, tamano: 10.5, ancho: 222 },
+      { valor: (d) => d.dni, x: 279.5, y: 711.1, tamano: 10.5, ancho: 90, fuente: "Helvetica-Bold" },
+      {
+        valor: (d) => `${dosCifras(d.fecha.getDate())}/${dosCifras(d.fecha.getMonth() + 1)}/${d.fecha.getFullYear()}`,
+        x: 371.7, y: 710, tamano: 10, ancho: 62, fuente: "Times-Roman",
+      },
+      { imagen: (d) => d.firma, x: 436.6, y: 689.2, ancho: 117.5, alto: 52.1 },
+    ],
+  },
 ];
 
 /** PDF de un documento especial relleno con los datos del trabajador. */
@@ -35,9 +79,22 @@ export function generar(especial, plantilla, datos) {
   try {
     const indice = especial.pagina < 0 ? doc.countPages() + especial.pagina : especial.pagina;
     const pagina = doc.loadPage(indice);
+    if (especial.borrar?.length) {
+      for (const rect of especial.borrar) pagina.createAnnotation("Redact").setRect(rect);
+      pagina.applyRedactions(false, mupdf.PDFPage.REDACT_IMAGE_NONE, mupdf.PDFPage.REDACT_LINE_ART_NONE, mupdf.PDFPage.REDACT_TEXT_REMOVE);
+    }
     const objetoPagina = pagina.getObject();
-    const fuente = new mupdf.Font("Helvetica"); // una de las 14 fuentes que todo lector de PDF tiene
-    const nombreFuente = anadirRecurso(doc, objetoPagina, "Font", "FEspecial", doc.addSimpleFont(fuente, "Latin"));
+
+    // Solo fuentes de las 14 estándar, que todo lector de PDF tiene
+    const fuentes = new Map();
+    const fuenteDe = (nombre = "Helvetica") => {
+      if (!fuentes.has(nombre)) {
+        const fuente = new mupdf.Font(nombre);
+        const recurso = anadirRecurso(doc, objetoPagina, "Font", "FEspecial", doc.addSimpleFont(fuente, "Latin"));
+        fuentes.set(nombre, { fuente, recurso });
+      }
+      return fuentes.get(nombre);
+    };
 
     const operadores = [];
     for (const campo of especial.campos) {
@@ -47,9 +104,11 @@ export function generar(especial, plantilla, datos) {
       }
       const texto = (campo.valor(datos) ?? "").trim();
       if (!texto) continue;
+      const { fuente, recurso } = fuenteDe(campo.fuente);
       const tamano = tamanoQueCabe(fuente, texto, campo.tamano, campo.ancho);
-      const [x, y] = aPdf(pagina, [campo.x, campo.y]);
-      operadores.push(`q BT 0 g /${nombreFuente} ${numero(tamano)} Tf 1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escapar(texto)}) Tj ET Q`);
+      const inicio = campo.centrado ? campo.x - anchoDelTexto(fuente, texto, tamano) / 2 : campo.x;
+      const [x, y] = aPdf(pagina, [inicio, campo.y]);
+      operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf 1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escapar(texto)}) Tj ET Q`);
     }
     anadirContenido(doc, objetoPagina, operadores.join("\n"));
     return guardar(doc);

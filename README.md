@@ -37,7 +37,10 @@ guardan en ningún sitio.
 1. Copia su plantilla en `plantillas/`.
 2. Añade su ficha en `js/especiales.js`: texto del botón, archivo, página que se rellena y
    dónde va cada dato (coordenadas de MuPDF, con la "y" en la línea base del texto, y el
-   ancho del hueco para que el texto se encoja si no cabe).
+   ancho del hueco para que el texto se encoja si no cabe). Si la plantilla trae datos de
+   otro trabajador, se indican en `borrar` las zonas que hay que vaciar antes.
+
+Ahora mismo hay tres: IESE MADRID, REAL MADRID y ATLETI.
 
 ## Desarrollo
 
