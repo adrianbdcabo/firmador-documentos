@@ -39,8 +39,8 @@ guardan en ningún sitio.
    dónde va cada dato (coordenadas de MuPDF, con la "y" en la línea base del texto, y el
    ancho del hueco para que el texto se encoja si no cabe).
 
-Ahora mismo hay seis: IESE MADRID, CUN MADRID, REAL MADRID, ATLETI, THALES y SANDOZ
-(este descarga dos: RECIBI SANDOZ e INFO SANDOZ) (el orden de los
+Ahora mismo hay siete: IESE MADRID, CUN MADRID, REAL MADRID, ATLETI, THALES, SANDOZ y CEPSA
+(SANDOZ descarga dos, RECIBI SANDOZ e INFO SANDOZ, y CEPSA otros dos, ANEXO 12 CEPSA y ANEXO 24 CEPSA) (el orden de los
 botones es el de la lista en `js/especiales.js`).
 
 ## Desarrollo

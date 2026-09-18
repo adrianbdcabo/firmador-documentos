@@ -128,6 +128,41 @@ export const ESPECIALES = [
       },
     ],
   },
+  {
+    // Dos documentos: ANEXO 12 (certificado de formación e información) y ANEXO 24 (renuncia al reconocimiento médico)
+    id: "cepsa",
+    boton: "CEPSA",
+    documentos: [
+      {
+        plantilla: "plantillas/cepsa-anexo-12.pdf",
+        archivo: (datos) => `ANEXO 12 CEPSA - ${datos.trabajador}.pdf`,
+        pagina: 0,
+        campos: [
+          { valor: (d) => fechaDeHoy(d.fecha).toUpperCase(), x: 146.8, y: 152.7, tamano: 10, ancho: 250 },
+          // Nombre y DNI en cursiva, como las etiquetas de la plantilla
+          { valor: (d) => d.trabajador, x: 198.8, y: 244.6, tamano: 10, ancho: 320, fuente: "Helvetica-Oblique" },
+          { valor: (d) => d.dni, x: 121.8, y: 281.4, tamano: 10, ancho: 150, fuente: "Helvetica-Oblique" },
+          { imagen: (d) => d.firma, x: 64.3, y: 625.1, ancho: 81, alto: 34.8 },
+          { imagen: (d) => d.sello, x: 67.7, y: 732.3, ancho: 71, alto: 52.6 }, // siempre lleva el sello
+        ],
+      },
+      {
+        plantilla: "plantillas/cepsa-anexo-24.pdf",
+        archivo: (datos) => `ANEXO 24 CEPSA - ${datos.trabajador}.pdf`,
+        pagina: 0,
+        campos: [
+          { valor: (d) => d.trabajador, x: 196.2, y: 188.3, tamano: 9, ancho: 305 }, // hasta el "con" (x=511)
+          { valor: (d) => d.dni, x: 109.9, y: 213.2, tamano: 9, ancho: 64 }, // hasta "en la empresa" (x=177)
+          { valor: (d) => d.puesto, x: 106.7, y: 249, tamano: 9, ancho: 420 },
+          // "En MADRID , a __ de ______ de ____"
+          { valor: (d) => String(d.fecha.getDate()), x: 155, y: 438.9, tamano: 9, ancho: 19 },
+          { valor: (d) => MESES[d.fecha.getMonth()].toUpperCase(), x: 197.8, y: 438.9, tamano: 9, ancho: 67 },
+          { valor: (d) => String(d.fecha.getFullYear()), x: 290, y: 438.9, tamano: 9, ancho: 40 },
+          { imagen: (d) => d.firma, x: 70.4, y: 545.7, ancho: 81, alto: 34.8 },
+        ],
+      },
+    ],
+  },
 ];
 
 /** Los documentos que descarga el botón de una plataforma (casi siempre, uno). */

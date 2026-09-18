@@ -268,6 +268,26 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     }
   });
 
+  test("CEPSA descarga dos documentos: ANEXO 12 (con el sello) y ANEXO 24 (con el puesto)", () => {
+    const resultado = procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, puesto: resultado.puesto, firma: resultado.firma, sello: SELLO, fecha: new Date(2026, 8, 18) };
+    const [anexo12, anexo24] = documentosDe(ESPECIALES.find((e) => e.id === "cepsa"));
+    assert.equal(anexo12.archivo(datos), `ANEXO 12 CEPSA - ${resultado.trabajador}.pdf`);
+    assert.equal(anexo24.archivo(datos), `ANEXO 24 CEPSA - ${resultado.trabajador}.pdf`);
+    for (const [documento, esperados, conSello] of [
+      [anexo12, ["18 DE SEPTIEMBRE DE 2026", resultado.trabajador, resultado.dni], true],
+      [anexo24, [resultado.trabajador, resultado.dni, resultado.puesto, "18", "SEPTIEMBRE", "2026"], false],
+    ]) {
+      const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${documento.plantilla}`, import.meta.url)));
+      const antes = imagenes(plantilla).length;
+      const pdf = generar(documento, plantilla, datos);
+      const texto = new mupdf.PDFDocument(pdf).loadPage(0).toStructuredText().asText();
+      for (const esperado of esperados) assert.ok(texto.includes(esperado), `${documento.archivo(datos)}: falta "${esperado}"`);
+      assert.ok(llevaImagen(pdf, datos.firma), "lleva la firma");
+      assert.equal(imagenes(pdf).length, antes + (conSello ? 2 : 1), "firma y, si toca, sello");
+    }
+  });
+
   test("en los documentos especiales un nombre o puesto larguísimo no se sale de su hueco", () => {
     const largo = "MARIA DEL CARMEN FERNANDEZ DE LA HOZ ECHEVARRIA GUTIERREZ";
     const puesto = "AYUDANTE DE COCINA Y MANTENIMIENTO DE INSTALACIONES DEPORTIVAS";
