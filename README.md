@@ -21,10 +21,10 @@ guardan en ningún sitio.
    - Si la firma sale de un PDF de otra persona (su NIF no coincide con el DNI del
      documento), la página avisa y pregunta.
    - La firma cargada sirve para ese documento; al cargar el siguiente se olvida.
-2. Opcional: **Poner fecha de hoy** cambia la fecha de "En COSLADA, a …" por la de hoy,
-   con la misma letra y tamaño que el original.
-3. Opcional: **Añadir sello** pone el sello de la empresa en INFO y REN. Cada documento
-   empieza sin sello. El sello viene con la web (`recursos/sello-temps.jpeg`): para
+2. **Poner fecha de hoy** cambia la fecha de "En COSLADA, a …" por la de hoy, con la misma
+   letra y tamaño que el original.
+3. **Añadir sello** pone el sello de la empresa en INFO y REN. Los dos interruptores vienen
+   activados en cada documento que se carga; se pueden desactivar. El sello viene con la web (`recursos/sello-temps.jpeg`): para
    cambiarlo, se sustituye ese archivo.
 4. Elige **3 documentos separados** o **Pack único** y pulsa **Descargar**. Para bajar solo
    una hoja, pincha sobre ella en la vista previa.

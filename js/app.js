@@ -57,7 +57,14 @@ async function cargarDocumento(archivo) {
   }
 
   if (estado.firma?.usada) estado.firma = null; // ya sirvió para el anterior, normalmente de otro trabajador
-  $("con-sello").checked = false; // cada documento empieza sin sello
+  // Cada documento empieza con la fecha de hoy y el sello; el usuario puede quitarlos
+  $("fecha-hoy").checked = true;
+  $("con-sello").checked = true;
+  try {
+    await cargarSello();
+  } catch {
+    $("con-sello").checked = false; // sin conexión para bajar el sello: se sigue sin él
+  }
   estado.documento = { nombre: archivo.name, datos };
   await procesarDocumento();
 }
@@ -305,6 +312,22 @@ async function mostrarPrevias() {
   else await mostrarTarjetas();
   $("zona").hidden = true;
   soltarMiniaturasViejas();
+  ajustarEspeciales();
+}
+
+/**
+ * El panel de documentos especiales no baja más que las vistas previas: si hay más botones
+ * de los que caben, se hace scroll dentro del panel. En el móvil va debajo y no se limita.
+ */
+function ajustarEspeciales() {
+  const panel = $("especiales");
+  const piezas = [...document.querySelectorAll(".tarjeta, .pila .hoja, .pila .etiqueta")].filter((el) => el.offsetParent !== null);
+  if (panel.hidden || !piezas.length || matchMedia("(max-width: 720px)").matches) {
+    panel.style.maxHeight = "";
+    return;
+  }
+  const abajo = Math.max(...piezas.map((el) => el.getBoundingClientRect().bottom));
+  panel.style.maxHeight = `${Math.max(160, Math.round(abajo - panel.getBoundingClientRect().top))}px`;
 }
 
 async function mostrarTarjetas() {
@@ -397,6 +420,7 @@ async function colocarPila() {
     etiqueta.querySelector("strong").textContent = hoja.clave;
     etiqueta.querySelector("span").textContent = `página ${hoja.paginaOrigen}`;
   }
+  ajustarEspeciales();
 }
 
 // Descarga
@@ -581,6 +605,7 @@ function iniciar() {
   });
 
   new ResizeObserver(() => colocarPila()).observe($("pila"));
+  new ResizeObserver(() => ajustarEspeciales()).observe($("tarjetas"));
 
   const [usuario] = location.hostname.endsWith(".github.io") ? location.hostname.split(".") : [];
   const repositorio = location.pathname.split("/").filter(Boolean)[0];
