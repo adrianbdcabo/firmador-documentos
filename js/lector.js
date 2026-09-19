@@ -264,6 +264,7 @@ export function interpretar(doc, pagina, { anotaciones = false } = {}) {
   const ops = operadores(bytes);
   const resultado = { glifos: [], imagenes: [], ops, bytes, caja };
   ejecutar(doc, ops, recursos, IDENTIDAD, { resultado, aPantalla, caja, nivel: 0, vistos: new Set(), recorte: caja });
+  resultado.finPagina = resultado.glifos.length; // lo que sigue es de las anotaciones
   if (anotaciones) ejecutarAnotaciones(doc, pagina, { resultado, aPantalla, caja, vistos: new Set() });
   return resultado;
 }
@@ -356,55 +357,72 @@ function ejecutar(doc, ops, recursos, ctmInicial, contexto) {
   const fuentes = obtener(doc, recursos, "Font");
   const xobjects = obtener(doc, recursos, "XObject");
 
+  // Se llama una vez por cada letra del documento: las cuentas se hacen a mano (sin crear matrices)
+  // porque es lo que más tarda al leer un documento.
   const mostrar = (textoBytes, opIndice, piezaIndice) => {
     const fuente = gs.fuente;
     if (!fuente) return;
-    const codigos = fuente.codigos(textoBytes);
-    for (const { codigo, inicio, fin } of codigos) {
+    const [m0, m1, m2, m3, m4, m5] = multiplicar(gs.ctm, aPantalla); // de texto a pantalla, fijo en el operador
+    const { tamano: tf, th, ts, tc, tw } = gs;
+    const asc = fuente.ascendente;
+    const desc = fuente.descendente;
+    const zona = gs.recorte;
+    const explicito = gs.recorteExplicito;
+    const color = colorARgb(gs.relleno);
+    const relleno = gs.tr === 0 || gs.tr === 2 || gs.tr === 4 || gs.tr === 6;
+    const editable = contexto.nivel === 0;
+    const e = 1e-3;
+    fuente.recorrerCodigos(textoBytes, (codigo, inicio, fin) => {
       const w0 = fuente.anchura(codigo);
-      const trm = multiplicar(multiplicar([gs.tamano * gs.th, 0, 0, gs.tamano, 0, gs.ts], tm), gs.ctm);
-      const enPantalla = multiplicar(trm, aPantalla);
-      const origen = aplicar(enPantalla, [0, 0]);
-      const esquinas = [[0, fuente.descendente], [w0, fuente.descendente], [0, fuente.ascendente], [w0, fuente.ascendente]].map((p) => aplicar(enPantalla, p));
-      const xs = esquinas.map((p) => p[0]);
-      const ys = esquinas.map((p) => p[1]);
-      const rect = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+      // Matriz de la letra en pantalla: [tf·th 0 0 tf 0 ts] × Tm × (CTM × pantalla)
+      const g0 = tf * th * tm[0], g1 = tf * th * tm[1], g2 = tf * tm[2], g3 = tf * tm[3];
+      const g4 = ts * tm[2] + tm[4], g5 = ts * tm[3] + tm[5];
+      const a = g0 * m0 + g1 * m2, b = g0 * m1 + g1 * m3;
+      const c = g2 * m0 + g3 * m2, d = g2 * m1 + g3 * m3;
+      const x = g4 * m0 + g5 * m2 + m4, y = g4 * m1 + g5 * m3 + m5;
+      // Caja de la letra: de su descendente a su ascendente y de 0 a su avance
+      const ax = w0 * a, ay = w0 * b;
+      const x1 = x + desc * c, y1 = y + desc * d;
+      const x2 = x + asc * c, y2 = y + asc * d;
+      const rect = [
+        Math.min(x1, x2, x1 + ax, x2 + ax), Math.min(y1, y2, y1 + ay, y2 + ay),
+        Math.max(x1, x2, x1 + ax, x2 + ax), Math.max(y1, y2, y1 + ay, y2 + ay),
+      ];
       const unicode = fuente.unicode(codigo);
-      const tamano = Math.sqrt(Math.abs(enPantalla[0] * enPantalla[3] - enPantalla[1] * enPantalla[2]));
       // Lo que queda fuera de la zona visible no se lee. Un espacio no tiene forma: cuenta su punto
       // de origen, que dentro de un recorte tiene que quedar dentro (no en el borde).
-      const zona = gs.recorte;
-      const e = 1e-3;
-      const fueraDePagina = /^\s*$/.test(unicode)
-        ? gs.recorteExplicito
-          ? !(origen[0] > zona[0] + e && origen[0] < zona[2] - e && origen[1] > zona[1] + e && origen[1] < zona[3] - e)
-          : origen[0] < zona[0] - e || origen[0] > zona[2] + e || origen[1] < zona[1] - e || origen[1] > zona[3] + e
+      const fueraDePagina = unicode.trim() === ""
+        ? explicito
+          ? !(x > zona[0] + e && x < zona[2] - e && y > zona[1] + e && y < zona[3] - e)
+          : x < zona[0] - e || x > zona[2] + e || y < zona[1] - e || y > zona[3] + e
         : rect[2] <= zona[0] || rect[0] >= zona[2] || rect[3] <= zona[1] || rect[1] >= zona[3];
-      const espacioPalabra = fin - inicio === 1 && codigo === 32 ? gs.tw : 0;
-      const espaciado = w0 * gs.tamano + gs.tc + espacioPalabra; // lo que avanza, en unidades de texto
+      const espacioPalabra = fin - inicio === 1 && codigo === 32 ? tw : 0;
+      const espaciado = w0 * tf + tc + espacioPalabra; // lo que avanza, en unidades de texto
       resultado.glifos.push({
         c: unicode,
         codigo,
         gid: fuente.gid(codigo),
         fuente,
-        tamano,
-        origen,
+        tamano: Math.sqrt(Math.abs(a * d - b * c)),
+        origen: [x, y],
         rect,
         avance: w0,
-        avancePantalla: [enPantalla[0] * w0, enPantalla[1] * w0],
-        color: colorARgb(gs.relleno),
-        relleno: gs.tr === 0 || gs.tr === 2 || gs.tr === 4 || gs.tr === 6,
+        avancePantalla: [ax, ay],
+        color,
+        relleno,
         fueraDePagina,
-        editable: contexto.nivel === 0,
+        editable,
         op: opIndice,
         pieza: piezaIndice,
         bytesInicio: inicio,
         bytesFin: fin,
-        tamanoFuente: gs.tamano,
+        tamanoFuente: tf,
         espaciado,
       });
-      tm = multiplicar([1, 0, 0, 1, espaciado * gs.th, 0], tm);
-    }
+      // Avanzar: Tm = [1 0 0 1 tx 0] × Tm
+      const tx = espaciado * th;
+      tm = [tm[0], tm[1], tm[2], tm[3], tx * tm[0] + tm[4], tx * tm[1] + tm[5]];
+    });
   };
 
   ops.forEach((operacion, indice) => {

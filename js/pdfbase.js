@@ -212,8 +212,13 @@ export function nombreBase(texto) {
 /** Diccionario de recursos propio de la página (si los heredaba, se copian a la página). */
 function recursosPropios(doc, pagina) {
   const nodo = pagina.node;
-  let recursos = resolver(doc, nodo.get(nombre("Resources")));
-  if (!(recursos instanceof PDFDict)) {
+  const propio = nodo.get(nombre("Resources"));
+  let recursos = resolver(doc, propio);
+  if (recursos instanceof PDFDict && propio instanceof PDFRef) {
+    // puede estar compartido con otras páginas: la página se queda con su propia copia
+    recursos = recursos.clone(doc.context);
+    nodo.set(nombre("Resources"), recursos);
+  } else if (!(recursos instanceof PDFDict)) {
     const heredados = heredado(doc, nodo, "Resources");
     recursos = heredados instanceof PDFDict ? heredados.clone(doc.context) : doc.context.obj({});
     nodo.set(nombre("Resources"), recursos);

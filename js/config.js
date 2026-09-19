@@ -1,7 +1,7 @@
-// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
+// © 2026 Adrián Barroso de Cabo.
 // Qué hojas se extraen y dónde se pega la firma y el sello en cada una.
 //
-// Coordenadas en puntos PDF con origen arriba a la izquierda (como MuPDF).
+// Coordenadas en puntos con el origen arriba a la izquierda de la página.
 // dx/dy se miden desde la esquina superior izquierda del texto "Fdo." y están calibrados
 // con los documentos de ejemplo firmados a mano (INFO/EPI/REN HECHA). x/y son la posición
 // fija que se usa si la hoja no tiene "Fdo.".

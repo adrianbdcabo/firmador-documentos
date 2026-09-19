@@ -2,7 +2,7 @@
 // La firma que se pega en las hojas: sacada de un PDF firmado o de una captura de pantalla.
 
 import { aplanarSobreBlanco, cajaConTinta, decodificar, png, recortar } from "./imagenes.js";
-import { campoFirma, capturarFirma, firmaDeHoja, firmante, localizarHojas } from "./pdf.js";
+import { abrirCacheado, campoFirma, capturarFirma, firmaDeHoja, firmante, localizarHojas } from "./pdf.js";
 import { ErrorProcesado, FirmaNoEncontrada, abrirPdf } from "./pdfbase.js";
 
 const MARGEN_CAPTURA_PX = 3;
@@ -41,7 +41,7 @@ const PAGINAS_HOJA_SUELTA = 3; // el documento global tiene muchas más
 
 /** Si el PDF es una hoja suelta ya firmada (y no el documento global), su firma; si no, null. */
 export async function deHojaSuelta(datos, origen) {
-  const doc = await abrirPdf(datos);
+  const doc = await abrirCacheado(datos); // si luego se procesa como documento laboral, ya está abierto
   if (doc.getPageCount() > PAGINAS_HOJA_SUELTA) return null;
   try {
     localizarHojas(doc); // si están las 3, es un documento laboral, no una hoja suelta
@@ -66,7 +66,7 @@ export async function desdeImagen(datos, origen) {
   if (!caja) throw new ErrorProcesado("La imagen está en blanco: no se ve ninguna firma.");
   const m = MARGEN_CAPTURA_PX;
   const recorte = [Math.max(0, caja[0] - m), Math.max(0, caja[1] - m), Math.min(imagen.ancho, caja[2] + m), Math.min(imagen.alto, caja[3] + m)];
-  return new Firma(png(recortar(sobreBlanco, recorte)), origen);
+  return new Firma(await png(recortar(sobreBlanco, recorte)), origen);
 }
 
 function identificador(texto) {

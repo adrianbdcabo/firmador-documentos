@@ -11,20 +11,30 @@ const esJpeg = (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8;
 export async function decodificar(bytes) {
   const datos = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   if (esPng(datos)) return desdePng(decodificarPng(datos));
+  // Los JPG (y BMP, GIF, WebP…) los lee el propio navegador, que suaviza los colores igual que los
+  // programas habituales; fuera del navegador (en las pruebas) los JPG se leen con jpeg-js.
+  if (typeof createImageBitmap === "function" && typeof OffscreenCanvas === "function") {
+    try {
+      return await conElNavegador(datos);
+    } catch (error) {
+      if (!esJpeg(datos)) throw error;
+    }
+  }
   if (esJpeg(datos)) {
     const jpg = decodificarJpeg(datos, { useTArray: true, formatAsRGBA: true, maxMemoryUsageInMB: 1024 });
     return { ancho: jpg.width, alto: jpg.height, datos: new Uint8ClampedArray(jpg.data.buffer, jpg.data.byteOffset, jpg.data.length) };
   }
-  if (typeof createImageBitmap === "function") {
-    // BMP, GIF, WebP…: los lee el propio navegador
-    const mapa = await createImageBitmap(new Blob([datos]));
-    const lienzo = new OffscreenCanvas(mapa.width, mapa.height);
-    const contexto = lienzo.getContext("2d");
-    contexto.drawImage(mapa, 0, 0);
-    const { data } = contexto.getImageData(0, 0, mapa.width, mapa.height);
-    return { ancho: mapa.width, alto: mapa.height, datos: data };
-  }
   throw new Error("formato de imagen no reconocido");
+}
+
+async function conElNavegador(datos) {
+  const mapa = await createImageBitmap(new Blob([datos]), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
+  const lienzo = new OffscreenCanvas(mapa.width, mapa.height);
+  const contexto = lienzo.getContext("2d");
+  contexto.drawImage(mapa, 0, 0);
+  const { data } = contexto.getImageData(0, 0, mapa.width, mapa.height);
+  mapa.close();
+  return { ancho: lienzo.width, alto: lienzo.height, datos: data };
 }
 
 function desdePng(png) {
@@ -123,16 +133,79 @@ export function recortar(imagen, [x0, y0, x1, y1]) {
   return { ancho, alto, datos };
 }
 
-/** PNG en color (RGB, sin transparencia). */
-export function png(imagen) {
+/**
+ * PNG en color (RGB, sin transparencia). Se comprime con la compresión que trae el navegador, que
+ * es muchísimo más rápida; si no la tiene, con fast-png.
+ */
+export async function png(imagen) {
   const { ancho, alto, datos } = imagen;
-  const rgb = new Uint8Array(ancho * alto * 3);
-  for (let i = 0, j = 0; i < datos.length; i += 4, j += 3) {
-    rgb[j] = datos[i];
-    rgb[j + 1] = datos[i + 1];
-    rgb[j + 2] = datos[i + 2];
+  if (typeof CompressionStream !== "function") {
+    const rgb = new Uint8Array(ancho * alto * 3);
+    for (let i = 0, j = 0; i < datos.length; i += 4, j += 3) {
+      rgb[j] = datos[i];
+      rgb[j + 1] = datos[i + 1];
+      rgb[j + 2] = datos[i + 2];
+    }
+    return codificarPng({ width: ancho, height: alto, data: rgb, channels: 3, depth: 8 });
   }
-  return codificarPng({ width: ancho, height: alto, data: rgb, channels: 3, depth: 8 });
+  // Filas sin filtro (cada una empieza por un 0) y comprimidas en formato zlib, como pide el PNG
+  const fila = ancho * 3 + 1;
+  const crudo = new Uint8Array(fila * alto);
+  for (let y = 0; y < alto; y++) {
+    let o = y * ancho * 4;
+    let d = y * fila + 1;
+    for (let x = 0; x < ancho; x++, o += 4, d += 3) {
+      crudo[d] = datos[o];
+      crudo[d + 1] = datos[o + 1];
+      crudo[d + 2] = datos[o + 2];
+    }
+  }
+  const comprimido = new Uint8Array(await new Response(new Blob([crudo]).stream().pipeThrough(new CompressionStream("deflate"))).arrayBuffer());
+  const cabecera = new Uint8Array(13);
+  const vista = new DataView(cabecera.buffer);
+  vista.setUint32(0, ancho);
+  vista.setUint32(4, alto);
+  cabecera.set([8, 2, 0, 0, 0], 8); // 8 bits, RGB, sin entrelazar
+  return unirPng([trozo("IHDR", cabecera), trozo("IDAT", comprimido), trozo("IEND", new Uint8Array(0))]);
+}
+
+const FIRMA_PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+function unirPng(trozos) {
+  const total = 8 + trozos.reduce((n, t) => n + t.length, 0);
+  const salida = new Uint8Array(total);
+  salida.set(FIRMA_PNG, 0);
+  let i = 8;
+  for (const t of trozos) {
+    salida.set(t, i);
+    i += t.length;
+  }
+  return salida;
+}
+
+function trozo(tipo, datos) {
+  const salida = new Uint8Array(12 + datos.length);
+  const vista = new DataView(salida.buffer);
+  vista.setUint32(0, datos.length);
+  for (let i = 0; i < 4; i++) salida[4 + i] = tipo.charCodeAt(i);
+  salida.set(datos, 8);
+  vista.setUint32(8 + datos.length, crc32(salida.subarray(4, 8 + datos.length)));
+  return salida;
+}
+
+let tablaCrc = null;
+function crc32(bytes) {
+  if (!tablaCrc) {
+    tablaCrc = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      tablaCrc[n] = c >>> 0;
+    }
+  }
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = tablaCrc[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
 }
 
 /**

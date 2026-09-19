@@ -144,6 +144,17 @@ class Fuente {
     }
   }
 
+  /** Llama a `accion(codigo, inicio, fin)` por cada código del texto (rápido en los casos habituales). */
+  recorrerCodigos(bytes, accion) {
+    if (this.rangos === RANGOS_UN_BYTE) {
+      for (let i = 0; i < bytes.length; i++) accion(bytes[i], i, i + 1);
+    } else if (this.rangos === RANGOS_DOS_BYTES) {
+      for (let i = 0; i + 1 < bytes.length; i += 2) accion(bytes[i] * 256 + bytes[i + 1], i, i + 2);
+    } else {
+      for (const { codigo, inicio, fin } of this.codigos(bytes)) accion(codigo, inicio, fin);
+    }
+  }
+
   /** Recorre los códigos de un texto: [{ codigo, bytes }]. */
   codigos(bytes) {
     const lista = [];
@@ -206,6 +217,7 @@ const FUENTE_VACIA = Object.freeze({
   ascendente: 0.8,
   descendente: -0.2,
   codigos: (bytes) => [...bytes].map((codigo, i) => ({ codigo, inicio: i, fin: i + 1 })),
+  recorrerCodigos: (bytes, accion) => bytes.forEach((codigo, i) => accion(codigo, i, i + 1)),
   gid: (codigo) => codigo,
   cid: (codigo) => codigo,
   anchura: () => 0.5,

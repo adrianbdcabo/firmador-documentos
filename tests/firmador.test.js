@@ -194,7 +194,7 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     for (const hoja of resultado.hojas) assert.ok(await llevaImagen(hoja.pdf, firma.imagen), hoja.clave);
     assert.deepEqual(resultado.avisos, []);
 
-    const blanco = png({ ancho: 50, alto: 20, datos: new Uint8ClampedArray(50 * 20 * 4).fill(255) });
+    const blanco = await png({ ancho: 50, alto: 20, datos: new Uint8ClampedArray(50 * 20 * 4).fill(255) });
     await assert.rejects(desdeImagen(blanco, "x"), /en blanco/);
     await assert.rejects(desdeImagen(new TextEncoder().encode("no es una imagen"), "x"), ErrorProcesado);
   });
@@ -330,6 +330,7 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
 
   test("reescribir la misma fecha no cambia ni un píxel", async () => {
     const resultado = await procesar(leer(DOCS.Y6912244E.archivo), { sello: SELLO, fecha: FECHA_ORIGINAL });
+    await resultado.originales();
     for (const hoja of resultado.hojas) {
       assert.notDeepEqual(hoja.pdf, hoja.pdfOriginal, "se ha reescrito de verdad");
       // Al dibujar, pdf.js puede redondear alguna posición: se admite 1-2 niveles (de 255), invisible
@@ -344,6 +345,7 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
   test("cambia la fecha sin tocar el resto y vuelve a la original", async () => {
     const resultado = await procesar(leer(DOCS.Y6912244E.archivo), { sello: SELLO });
     const originales = resultado.hojas.map((h) => h.pdf);
+    await resultado.originales();
     assert.deepEqual(await resultado.ponerFecha(DIFICIL), []);
     for (const hoja of resultado.hojas) {
       const nuevo = await texto(hoja.pdf);

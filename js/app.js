@@ -5,7 +5,7 @@ import { documentosDe, ESPECIALES, generar } from "./especiales.js";
 import { fechaDeHoy } from "./fecha.js";
 import * as firmas from "./firma.js";
 import { calentar, ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
-import { miniatura } from "./render.js";
+import { miniatura, miniaturas } from "./render.js";
 
 const $ = (id) => document.getElementById(id);
 const RUTA_SELLO = "recursos/sello-temps.jpeg"; // el sello viene con la web: no hay que cargarlo
@@ -38,7 +38,8 @@ const estado = {
   resultado: null,
   sello: null, // imagen del sello de la empresa, que se descarga con la web
   modo: "separados",
-  urls: new Map(), // miniaturas ya generadas (bytes del PDF -> URL)
+  urls: new Map(), // miniaturas ya generadas (bytes de las hojas -> ancho -> URLs)
+  imagenes: new WeakMap(), // resultado -> la firma y el sello listos para dibujarlos encima
 };
 
 // Documento laboral
@@ -125,7 +126,7 @@ async function procesarDocumento({ mantenerVista = false } = {}) {
 
 function limpiar() {
   estado.resultado = null;
-  for (const porAncho of estado.urls.values()) for (const url of porAncho.values()) URL.revokeObjectURL(url);
+  for (const porAncho of estado.urls.values()) for (const urls of porAncho.values()) urls.forEach((url) => URL.revokeObjectURL(url));
   estado.urls.clear();
   $("tarjetas").hidden = true;
   $("tarjetas").replaceChildren();
@@ -278,15 +279,35 @@ function firmaId(firma) {
 
 // Vistas previas
 
-async function urlMiniatura(pdf, ancho) {
-  const clave = `${ancho}`;
+/**
+ * URLs de las vistas previas de las tres hojas. Se dibujan las tres juntas (comparten fuentes) sin
+ * la firma ni el sello, y esas dos imágenes se pegan encima: así es bastante más rápido.
+ */
+async function urlsMiniaturas(resultado, ancho) {
+  const pdf = resultado.desnudo;
   let porPdf = estado.urls.get(pdf);
   if (!porPdf) {
     porPdf = new Map();
     estado.urls.set(pdf, porPdf);
   }
-  if (!porPdf.has(clave)) porPdf.set(clave, URL.createObjectURL(new Blob([await miniatura(pdf, ancho)], { type: "image/bmp" })));
-  return porPdf.get(clave);
+  if (!porPdf.has(ancho)) {
+    const imagenes = await miniaturas(pdf, ancho, await sitiosConImagen(resultado));
+    porPdf.set(ancho, imagenes.map((bytes) => URL.createObjectURL(new Blob([bytes], { type: "image/bmp" }))));
+  }
+  return porPdf.get(ancho);
+}
+
+/** La firma y el sello de cada hoja, listos para dibujarlos encima de la vista previa. */
+async function sitiosConImagen(resultado) {
+  if (!estado.imagenes.has(resultado)) {
+    const aImagen = async (bytes) => createImageBitmap(new Blob([bytes]));
+    estado.imagenes.set(resultado, {
+      firma: await aImagen(resultado.firma),
+      sello: resultado.sello ? await aImagen(resultado.sello) : null,
+    });
+  }
+  const { firma, sello } = estado.imagenes.get(resultado);
+  return resultado.sitios.map((sitios) => sitios.map((sitio) => ({ ...sitio, imagen: sitio.esSello ? sello : firma })));
 }
 
 /** Espera a que la imagen esté cargada, para cambiarla sin que parpadee. */
@@ -300,10 +321,10 @@ function precargar(url) {
 
 /** Suelta las miniaturas de versiones anteriores de las hojas (al cambiar la fecha o el sello). */
 function soltarMiniaturasViejas() {
-  const enUso = new Set(estado.resultado?.hojas.map((hoja) => hoja.pdf) ?? []);
+  const enUso = estado.resultado?.desnudo;
   for (const [pdf, porAncho] of estado.urls) {
-    if (enUso.has(pdf)) continue;
-    for (const url of porAncho.values()) URL.revokeObjectURL(url);
+    if (pdf === enUso) continue;
+    for (const urls of porAncho.values()) urls.forEach((url) => URL.revokeObjectURL(url));
     estado.urls.delete(pdf);
   }
 }
@@ -336,7 +357,7 @@ async function mostrarTarjetas() {
   const { resultado } = estado;
   const contenedor = $("tarjetas");
   const ancho = Math.round(300 * (window.devicePixelRatio || 1));
-  const urls = await Promise.all(resultado.hojas.map(async (hoja) => precargar(await urlMiniatura(hoja.pdf, ancho))));
+  const urls = await Promise.all((await urlsMiniaturas(resultado, ancho)).map(precargar));
 
   // Se reutilizan las tarjetas que ya están puestas: así no desaparecen y vuelven a aparecer.
   if (contenedor.children.length !== resultado.hojas.length) {
@@ -392,7 +413,7 @@ async function colocarPila() {
   const y0 = Math.max(4, (pila.clientHeight - alto - desfase * (n - 1)) / 2);
   const resolucion = Math.round(ancho * (window.devicePixelRatio || 1));
 
-  const urls = await Promise.all(resultado.hojas.map(async (hoja) => precargar(await urlMiniatura(hoja.pdf, resolucion))));
+  const urls = await Promise.all((await urlsMiniaturas(resultado, resolucion)).map(precargar));
 
   // Se reutilizan las hojas ya puestas (una hoja y su etiqueta por cada una) para que no parpadeen.
   if (pila.children.length !== n * 2) {
@@ -498,7 +519,7 @@ function crearBotonesEspeciales() {
     boton.title = cuantos > 1
       ? `Descargar los ${cuantos} documentos de ${especial.boton} rellenos con los datos del trabajador`
       : `Descargar el documento de ${especial.boton} relleno con los datos del trabajador`;
-    boton.addEventListener("click", () => descargarEspecial(especial));
+    boton.addEventListener("click", enOrden(() => descargarEspecial(especial)));
     contenedor.append(boton);
   }
 }
@@ -538,6 +559,19 @@ function dialogo(titulo, texto, textoSi, textoNo) {
 const alerta = (titulo, texto) => dialogo(titulo, texto, "Aceptar");
 const confirmar = (titulo, texto, textoSi) => dialogo(titulo, texto, textoSi, "No");
 
+// Las acciones del usuario se hacen de una en una, en el orden en que llegan. Leer y generar los PDF
+// no bloquea la página, así que sin esto pulsar algo mientras se procesa (p. ej. «Pack» mientras se
+// cambia la fecha) podría mezclar los resultados.
+let cola = Promise.resolve();
+
+function enOrden(accion) {
+  return (...argumentos) => {
+    const hecha = cola.then(() => accion(...argumentos));
+    cola = hecha.catch(() => {});
+    return hecha;
+  };
+}
+
 function enlazarArchivo(boton, input, accion) {
   if (boton) $(boton).addEventListener("click", () => $(input).click());
   $(input).addEventListener("change", async () => {
@@ -554,18 +588,21 @@ function esImagen(archivo) {
 // Arranque
 
 function iniciar() {
-  enlazarArchivo("btn-documento", "input-documento", cargarDocumento);
-  enlazarArchivo("btn-firma", "input-firma", cargarFirmaArchivo);
-  $("quitar-firma").addEventListener("click", quitarFirma);
-  $("fecha-hoy").addEventListener("change", cambiarFecha);
-  $("con-sello").addEventListener("change", cambiarSello);
-  $("btn-descargar").addEventListener("click", descargarTodo);
+  enlazarArchivo("btn-documento", "input-documento", enOrden(cargarDocumento));
+  enlazarArchivo("btn-firma", "input-firma", enOrden(cargarFirmaArchivo));
+  $("quitar-firma").addEventListener("click", enOrden(quitarFirma));
+  $("fecha-hoy").addEventListener("change", enOrden(cambiarFecha));
+  $("con-sello").addEventListener("change", enOrden(cambiarSello));
+  $("btn-descargar").addEventListener("click", enOrden(descargarTodo));
 
   for (const boton of document.querySelectorAll(".selector button")) {
+    const mostrarModo = enOrden(async () => {
+      if (estado.resultado) await mostrarPrevias();
+    });
     boton.addEventListener("click", () => {
       estado.modo = boton.dataset.modo;
       for (const otro of document.querySelectorAll(".selector button")) otro.setAttribute("aria-checked", String(otro === boton));
-      if (estado.resultado) mostrarPrevias();
+      mostrarModo();
     });
   }
 
@@ -580,7 +617,7 @@ function iniciar() {
     }
     evento.preventDefault();
     const datos = new Uint8Array(await item.getAsFile().arrayBuffer());
-    await usarFirma(() => firmas.desdeImagen(datos, "captura pegada"));
+    await enOrden(usarFirma)(() => firmas.desdeImagen(datos, "captura pegada"));
   });
 
   // Arrastrar y soltar: PDF -> documento laboral (o firma si se está esperando una); imagen -> firma.
@@ -600,18 +637,14 @@ function iniciar() {
     $("zona").classList.remove("arrastrando");
     for (const archivo of e.dataTransfer?.files ?? []) {
       const esPdf = archivo.type === "application/pdf" || /\.pdf$/i.test(archivo.name);
-      if (esImagen(archivo) || (esPdf && esperandoFirma())) return cargarFirmaArchivo(archivo);
-      if (esPdf) return cargarDocumento(archivo);
+      if (esImagen(archivo) || (esPdf && esperandoFirma())) return enOrden(cargarFirmaArchivo)(archivo);
+      if (esPdf) return enOrden(cargarDocumento)(archivo);
     }
     await alerta("Archivo no válido", "Arrastra un documento PDF o una captura de la firma.");
   });
 
   new ResizeObserver(() => colocarPila()).observe($("pila"));
   new ResizeObserver(() => ajustarEspeciales()).observe($("tarjetas"));
-
-  const [usuario] = location.hostname.endsWith(".github.io") ? location.hostname.split(".") : [];
-  const repositorio = location.pathname.split("/").filter(Boolean)[0];
-  if (usuario && repositorio) $("enlace-codigo").href = `https://github.com/${usuario}/${repositorio}`;
 
   crearBotonesEspeciales();
   for (const id of ["btn-documento", "btn-firma"]) $(id).disabled = false;

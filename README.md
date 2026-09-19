@@ -38,7 +38,7 @@ guardan en ningún sitio.
 
 1. Copia su plantilla en `plantillas/`.
 2. Añade su ficha en `js/especiales.js`: texto del botón, archivo, página que se rellena y
-   dónde va cada dato (coordenadas de MuPDF, con la "y" en la línea base del texto, y el
+   dónde va cada dato (en puntos desde arriba a la izquierda, con la "y" en la línea base del texto, y el
    ancho del hueco para que el texto se encoja si no cabe).
 
 Ahora mismo hay siete: IESE MADRID, CUN MADRID, REAL MADRID, ATLETI, THALES, SANDOZ y CEPSA
@@ -47,8 +47,8 @@ botones es el de la lista en `js/especiales.js`).
 
 ## Desarrollo
 
-Es una web estática sin paso de compilación: `index.html`, `css/`, `js/` y MuPDF.js en
-`vendor/mupdf/`. Para probarla en local hace falta servirla por HTTP (no abrir el archivo
+Es una web estática sin paso de compilación: `index.html`, `css/`, `js/` y las librerías en
+`vendor/` (pdf-lib, pdf.js y los lectores de imágenes). Para probarla en local hace falta servirla por HTTP (no abrir el archivo
 directamente), por ejemplo:
 
 ```sh
@@ -63,12 +63,28 @@ npm install
 npm test
 ```
 
-Para actualizar MuPDF.js: `npm install mupdf@latest` y copiar `mupdf.js`, `mupdf-wasm.js`
-y `mupdf-wasm.wasm` de `node_modules/mupdf/dist/` a `vendor/mupdf/`.
+Qué hace cada archivo de `js/`:
+
+- `app.js`: la interfaz (cargar, vistas previas, descargar).
+- `pdf.js`: separa las hojas, captura la firma digital y pega firma y sello.
+- `fecha.js`: cambia la fecha conservando la letra del documento.
+- `lector.js`: lee el contenido de una página (qué letra hay en cada sitio) y permite modificarlo.
+- `fuentes.js`: las fuentes del PDF (qué letra es cada código, cuánto mide).
+- `pdfbase.js`: utilidades sobre pdf-lib (abrir, guardar, coordenadas, recursos).
+- `render.js`: dibujar páginas con pdf.js.
+- `imagenes.js`: leer y escribir PNG y JPG, recortar y componer.
+- `especiales.js`: los documentos de plataformas.
+
+Para actualizar las librerías: `npm install pdf-lib@latest pdfjs-dist@latest fast-png@latest jpeg-js@latest`
+y copiar a `vendor/` `pdf-lib.esm.min.js`, los archivos de `pdfjs-dist/legacy/build/` (más
+`standard_fonts/` y `wasm/`) y volver a generar `vendor/imagenes/imagenes.min.js` con esbuild.
 
 ## Autoría y licencia
 
 Copyright © 2026 Adrián Barroso de Cabo. Autor y titular de los derechos de este programa.
 
-Usa [MuPDF.js](https://github.com/ArtifexSoftware/mupdf.js), con licencia AGPL-3.0, por lo
-que este proyecto se distribuye también bajo la [AGPL-3.0](LICENSE).
+Programa propio: **todos los derechos reservados** (ver [LICENSE](LICENSE)). No se puede
+copiar, distribuir ni usar sin permiso por escrito del autor.
+
+Las librerías de terceros que usa tienen licencias permisivas (MIT, Apache-2.0, BSD) y están
+detalladas en [LICENCIAS-TERCEROS.md](LICENCIAS-TERCEROS.md).

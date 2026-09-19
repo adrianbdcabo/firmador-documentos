@@ -2,8 +2,8 @@
 // Lógica principal: localiza las hojas, captura la firma digital y pega firma y sello.
 
 import * as config from "./config.js";
-import { FechaNoCambiada, cambiarFecha, recorrerTexto } from "./fecha.js";
-import { cajaConTinta, png, recortar } from "./imagenes.js";
+import { FechaNoCambiada, leerHoja, ponerFechaEnPagina, recorrerTexto } from "./fecha.js";
+import { cajaConTinta, decodificar, png, pngParaPdf, recortar } from "./imagenes.js";
 import { interpretar, lineasDeGlifos, matrizDeAspecto, textoDeLineas } from "./lector.js";
 import {
   ErrorProcesado,
@@ -35,9 +35,20 @@ import { PDFObjectCopier } from "../vendor/pdf-lib/pdf-lib.esm.min.js";
 
 export { ErrorProcesado, FirmaNoEncontrada };
 
+/**
+ * Las tres hojas firmadas. Se preparan juntas en un único PDF (`conjunto`, que es el pack): así
+ * comparten las fuentes y las imágenes, y dibujarlas o cambiarles la fecha es mucho más rápido. Cada
+ * hoja suelta (`hoja.pdf`) se saca de él.
+ */
 export class Resultado {
-  constructor(trabajador, hojas, glifos, dni, puesto, firma) {
+  constructor(trabajador, desnudo, hojas, glifos, dni, puesto, firma, sello, sitios) {
     this.trabajador = trabajador;
+    this.desnudoOriginal = desnudo; // las tres hojas sin firma ni sello, con la fecha original
+    this.desnudo = desnudo; // igual, con la fecha elegida: es lo que se dibuja en la vista previa
+    this.conjuntoOriginal = null; // las tres hojas terminadas con la fecha original
+    this.conjunto = null; // las tres hojas terminadas como están ahora (el pack)
+    this.sello = sello; // imagen del sello, o null
+    this.sitios = sitios; // dónde va cada imagen en cada hoja (para dibujarlas en la vista previa)
     this.hojas = hojas; // [{ clave, titulo, paginaOrigen, pdfOriginal, pdf }]
     this.glifos = glifos;
     this.dni = dni;
@@ -45,37 +56,67 @@ export class Resultado {
     this.firma = firma; // PNG de la firma que se ha pegado en las hojas
     this.fecha = null; // null: la fecha original del documento
     this.avisos = [];
+    this.leidas = null; // lo leído de cada hoja para cambiarle la fecha (se lee la primera vez)
   }
 
   /** Pone `fecha` en todas las hojas, o la original si es null. Devuelve avisos de las que no se ha podido. */
   async ponerFecha(fecha) {
     this.fecha = fecha;
-    const avisos = [];
-    const pdfs = await Promise.all(this.hojas.map(async (hoja) => {
-      if (!fecha) return hoja.pdfOriginal;
-      try {
-        return await cambiarFecha(hoja.pdfOriginal, fecha, this.glifos);
-      } catch (error) {
-        if (!(error instanceof FechaNoCambiada)) throw error;
-        avisos.push(`${hoja.clave}: ${error.message}`);
-        return hoja.pdfOriginal;
-      }
-    }));
-    this.hojas.forEach((hoja, i) => (hoja.pdf = pdfs[i]));
-    this.avisos = this.hojas.map((h) => avisos.find((a) => a.startsWith(`${h.clave}:`))).filter(Boolean);
+    this.avisos = [];
+    const doc = await PDFDocument.load(this.desnudoOriginal, { updateMetadata: false });
+    if (fecha) {
+      this.leidas ??= doc.getPages().map((pagina) => leerHoja(doc, pagina));
+      doc.getPages().forEach((pagina, i) => {
+        try {
+          ponerFechaEnPagina(doc, pagina, fecha, this.glifos, this.leidas[i]);
+        } catch (error) {
+          if (!(error instanceof FechaNoCambiada)) throw error;
+          this.avisos.push(`${this.hojas[i].clave}: ${error.message}`);
+        }
+      });
+      this.desnudo = await guardar(doc);
+    } else {
+      this.desnudo = this.desnudoOriginal;
+    }
+    // La firma y el sello se pegan ahora: así la vista previa puede dibujar las hojas sin ellos
+    const firma = await incrustarImagen(doc, this.firma);
+    const sello = this.sello ? await incrustarImagen(doc, this.sello) : null;
+    doc.getPages().forEach((pagina, i) => {
+      for (const sitio of this.sitios[i]) pegarImagen(doc, pagina, sitio.esSello ? sello : firma, sitio);
+    });
+    this.conjunto = await guardar(doc);
+    const sueltas = await separar(this.conjunto);
+    this.hojas.forEach((hoja, i) => (hoja.pdf = sueltas[i]));
     return this.avisos;
+  }
+
+  /** Las hojas tal cual, con la fecha original del documento (se preparan la primera vez que se piden). */
+  async originales() {
+    if (!this.conjuntoOriginal) {
+      const fecha = this.fecha;
+      await this.ponerFecha(null);
+      this.conjuntoOriginal = this.conjunto;
+      this.hojas.forEach((hoja) => (hoja.pdfOriginal = hoja.pdf));
+      if (fecha) await this.ponerFecha(fecha);
+    }
+    return { conjunto: this.conjuntoOriginal, hojas: this.hojas.map((hoja) => hoja.pdfOriginal) };
   }
 
   /** Un único PDF con todas las hojas. */
   async pack() {
-    const destino = await PDFDocument.create();
-    for (const hoja of this.hojas) {
-      const origen = await PDFDocument.load(hoja.pdf, { updateMetadata: false });
-      const [pagina] = await destino.copyPages(origen, [0]);
-      destino.addPage(pagina);
-    }
-    return guardar(destino);
+    return this.conjunto;
   }
+}
+
+/** Cada página de un PDF como un PDF aparte. */
+async function separar(pdf) {
+  const doc = await PDFDocument.load(pdf, { updateMetadata: false });
+  return Promise.all(doc.getPageIndices().map(async (i) => {
+    const suelta = await PDFDocument.create();
+    const [pagina] = await suelta.copyPages(doc, [i]);
+    suelta.addPage(pagina);
+    return guardar(suelta);
+  }));
 }
 
 /**
@@ -85,41 +126,88 @@ export class Resultado {
  * las hojas salen sin sello.
  */
 export async function procesar(datos, { fecha = null, imagenFirma = null, sello = null } = {}) {
-  const doc = await abrirPdf(datos);
-  const { glifos, textos } = recorrerTexto(doc);
-  const paginas = localizarHojas(doc, textos);
-  const firma = imagenFirma ?? (await capturarFirma(doc));
-  const textoHojas = Object.values(paginas).map((n) => textoPagina(doc, doc.getPage(n))).join(" ");
+  const { doc, glifos, paginas, lineasDe, textoHojas, firmaDelDocumento } = await analizar(datos, { conFirma: !imagenFirma });
+  const firma = imagenFirma ?? (await firmaDelDocumento());
 
-  // Solo las páginas: sin anotaciones ni campos (la firma digital original no sería válida al separar).
-  for (const n of Object.values(paginas)) doc.getPage(n).node.delete(PDFName.of("Annots"));
-
+  // Las tres hojas, copiadas de una vez para que compartan fuentes; la firma y el sello, una vez.
+  // Sin anotaciones ni campos: la firma digital original no sería válida al separar las hojas.
+  const conjunto = await PDFDocument.create();
+  const anotaciones = Object.values(paginas).map((n) => [doc.getPage(n).node, doc.getPage(n).node.get(PDFName.of("Annots"))]);
+  for (const [nodo] of anotaciones) nodo.delete(PDFName.of("Annots"));
+  const copias = await conjunto.copyPages(doc, config.HOJAS.map((hoja) => paginas[hoja.clave]));
+  for (const [nodo, valor] of anotaciones) if (valor !== undefined) nodo.set(PDFName.of("Annots"), valor);
+  const tamanoFirma = await tamanoDeImagen(firma);
+  const tamanoSello = sello ? await tamanoDeImagen(sello) : null;
   let trabajador = "";
-  const hojas = await Promise.all(config.HOJAS.map(async (hoja) => {
-    const numeroPagina = paginas[hoja.clave];
-    const salida = await PDFDocument.create();
-    const [pagina] = await salida.copyPages(doc, [numeroPagina]);
-    salida.addPage(pagina);
+  const sitios = config.HOJAS.map((hoja, i) => {
+    const pagina = conjunto.addPage(copias[i]);
+    const lineas = lineasDe[hoja.clave];
+    const ancla = buscarAncla(conjunto, pagina, hoja.ladoAncla, lineas);
+    if (hoja.clave === config.HOJA_NOMBRE) trabajador = nombreTrabajador(conjunto, pagina, ancla, lineas);
+    const suyos = [sitioDeImagen(conjunto, pagina, tamanoFirma, hoja.firma, config.CAJA_FIRMA, ancla)];
+    if (hoja.sello && tamanoSello) suyos.push({ ...sitioDeImagen(conjunto, pagina, tamanoSello, hoja.sello, config.CAJA_SELLO, ancla), esSello: true });
+    return suyos;
+  });
+  const desnudoOriginal = await guardar(conjunto);
 
-    const lineas = lineasDeGlifos(interpretar(salida, pagina).glifos);
-    const ancla = buscarAncla(salida, pagina, hoja.ladoAncla, lineas);
-    if (hoja.clave === config.HOJA_NOMBRE) trabajador = nombreTrabajador(salida, pagina, ancla, lineas);
-    await pegarImagen(salida, pagina, firma, hoja.firma, config.CAJA_FIRMA, ancla);
-    if (hoja.sello && sello) await pegarImagen(salida, pagina, sello, hoja.sello, config.CAJA_SELLO, ancla);
-
-    return { clave: hoja.clave, titulo: hoja.titulo, paginaOrigen: numeroPagina + 1, pdfOriginal: await guardar(salida), pdf: null };
+  const hojas = config.HOJAS.map((hoja) => ({
+    clave: hoja.clave,
+    titulo: hoja.titulo,
+    paginaOrigen: paginas[hoja.clave] + 1,
+    pdfOriginal: null,
+    pdf: null,
   }));
 
   const resultado = new Resultado(
     nombreParaArchivo(trabajador) || "TRABAJADOR",
+    desnudoOriginal,
     hojas,
     glifos,
     dniDelTexto(textoHojas),
     puestoDelTexto(textoHojas),
     firma,
+    sello,
+    sitios,
   );
   await resultado.ponerFecha(fecha);
+  if (!fecha) await resultado.originales(); // sin fecha, lo que hay ya es el original
   return resultado;
+}
+
+const abiertos = new WeakMap(); // bytes del documento -> documento ya abierto
+const analisis = new WeakMap(); // documento -> lo leído de él (se reaprovecha al repetir)
+
+/** Abre el PDF una sola vez: al volver a generar las hojas se reaprovecha lo ya abierto. */
+export async function abrirCacheado(datos) {
+  if (!abiertos.has(datos)) abiertos.set(datos, await abrirPdf(datos));
+  return abiertos.get(datos);
+}
+
+/**
+ * Lee el documento laboral: sus letras, dónde están las hojas y (si se pide) la firma digital.
+ * Se guarda lo leído: al volver a generar las hojas (al añadir el sello o cambiar la firma) no hay
+ * que leer el documento otra vez.
+ */
+async function analizar(datos, { conFirma }) {
+  const doc = await abrirCacheado(datos);
+  if (!analisis.has(doc)) {
+    const { glifos, textos, porPagina } = recorrerTexto(doc);
+    const paginas = localizarHojas(doc, textos);
+    // Las líneas de texto de cada hoja se sacan de lo ya leído: la copia de la página es idéntica
+    const lineasDe = Object.fromEntries(Object.entries(paginas).map(([clave, n]) => [clave, lineasDeGlifos(porPagina[n])]));
+    let capturada = null;
+    analisis.set(doc, {
+      doc,
+      glifos,
+      paginas,
+      lineasDe,
+      textoHojas: Object.values(lineasDe).map(textoDeLineas).join(" "),
+      firmaDelDocumento: () => (capturada ??= capturarFirma(doc)),
+    });
+  }
+  const info = analisis.get(doc);
+  if (conFirma) info.firmaDelDocumento().catch(() => {}); // se va dibujando mientras tanto
+  return info;
 }
 
 /** Texto de una página, línea a línea. */
@@ -138,7 +226,8 @@ export async function calentar(datos, imagen) {
   const salida = await PDFDocument.create();
   const [pagina] = await salida.copyPages(doc, [0]);
   salida.addPage(pagina);
-  await pegarImagen(salida, pagina, imagen, { x: 0, y: 0 }, config.CAJA_FIRMA, null);
+  const sitio = sitioDeImagen(salida, pagina, await tamanoDeImagen(imagen), { x: 0, y: 0 }, config.CAJA_FIRMA, null);
+  pegarImagen(salida, pagina, await incrustarImagen(salida, imagen), sitio);
   const pdf = await guardar(salida);
   await renderizar(pdf, { escala: 0.3 });
   return pdf;
@@ -246,7 +335,7 @@ export async function capturarFirma(doc) {
     Math.min(imagen.ancho, Math.ceil(tinta[2] + margen)),
     Math.min(imagen.alto, Math.ceil(tinta[3] + margen)),
   ];
-  return png(recortar(imagen, recorte));
+  return await png(recortar(imagen, recorte));
 }
 
 const TOLERANCIA_FIRMA = 14; // puntos de margen al buscar la firma pegada en una hoja ya hecha
@@ -291,7 +380,7 @@ async function imagenAPng(doc, objeto) {
   const ancho = comoNumero(obtener(doc, objeto, "Width")) ?? 1;
   const alto = comoNumero(obtener(doc, objeto, "Height")) ?? 1;
   const imagen = await dibujarSolo(doc, objeto, [0, 0, ancho, alto], `q ${ancho} 0 0 ${alto} 0 0 cm /Obj Do Q`, 1);
-  return png(imagen);
+  return await png(imagen);
 }
 
 /** Quién firma la hoja: en EPI el nombre va a la derecha del "Fdo." y en INFO y REN, debajo. */
@@ -394,11 +483,11 @@ export function buscarAncla(doc, pagina, lado, lineas = lineasDeGlifos(interpret
     .reduce((mejor, r) => (!mejor || r[1] > mejor[1] ? r : mejor), null);
 }
 
-async function pegarImagen(doc, pagina, bytes, colocacion, caja, ancla) {
-  const imagen = await incrustarImagen(doc, bytes);
-  const escala = Math.min(caja.ancho / imagen.ancho, caja.alto / imagen.alto);
-  const ancho = imagen.ancho * escala;
-  const alto = imagen.alto * escala;
+/** Dónde va una imagen en la hoja: x, y, ancho y alto en puntos desde arriba a la izquierda. */
+function sitioDeImagen(doc, pagina, tamano, colocacion, caja, ancla) {
+  const escala = Math.min(caja.ancho / tamano.ancho, caja.alto / tamano.alto);
+  const ancho = tamano.ancho * escala;
+  const alto = tamano.alto * escala;
   const [bx0, by0, bx1, by1] = limites(doc, pagina);
 
   let x = ancla ? ancla[0] + colocacion.dx : colocacion.x;
@@ -406,10 +495,21 @@ async function pegarImagen(doc, pagina, bytes, colocacion, caja, ancla) {
   // Nunca fuera de la página, aunque el ancla esté muy abajo.
   x = Math.min(Math.max(x, bx0), bx1 - ancho);
   y = Math.min(Math.max(y, by0), by1 - alto);
+  return { x, y, ancho, alto };
+}
 
+function pegarImagen(doc, pagina, imagen, sitio) {
   const nombre = anadirRecurso(doc, pagina, "XObject", "ImgFirmador", imagen.ref);
-  const matriz = multiplicar([ancho, 0, 0, -alto, x, y + alto], invertir(transformacion(doc, pagina)));
+  const matriz = multiplicar([sitio.ancho, 0, 0, -sitio.alto, sitio.x, sitio.y + sitio.alto], invertir(transformacion(doc, pagina)));
   anadirContenido(doc, pagina, `q ${matriz.map(numero).join(" ")} cm /${nombre} Do Q`);
+}
+
+/** Tamaño en píxeles de una imagen (PNG o JPG). */
+async function tamanoDeImagen(bytes) {
+  const png = pngParaPdf(bytes);
+  if (png) return { ancho: png.ancho, alto: png.alto };
+  const imagen = await decodificar(bytes);
+  return { ancho: imagen.ancho, alto: imagen.alto };
 }
 
 function nombreTrabajador(doc, pagina, ancla, lineas) {

@@ -3,7 +3,7 @@
 // que es lo que se publica en Cloudflare con `npm run deploy`.
 import fs from "node:fs";
 
-const ARCHIVOS = ["index.html", "css", "js", "vendor", "plantillas", "recursos", "icono.svg", "LICENSE"];
+const ARCHIVOS = ["index.html", "css", "js", "vendor", "plantillas", "recursos", "icono.svg", "LICENSE", "LICENCIAS-TERCEROS.md"];
 
 fs.rmSync("dist", { recursive: true, force: true });
 fs.mkdirSync("dist");

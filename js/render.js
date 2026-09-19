@@ -39,38 +39,64 @@ async function crearLienzo(ancho, alto) {
 }
 
 /**
- * Dibuja la página `indice` (desde 0) del PDF a `escala` píxeles por punto, sobre blanco.
- * Con `anotaciones: false` solo se dibuja el contenido de la página.
+ * Dibuja una página ya abierta por pdf.js. `superpuestas` son imágenes que se pegan encima
+ * (la firma y el sello), con su sitio en puntos: { imagen, x, y, ancho, alto }.
  */
-export async function renderizar(pdf, { indice = 0, escala = 1, anchoPx = 0, anotaciones = true } = {}) {
+async function dibujar(pagina, { escala = 1, anchoPx = 0, anotaciones = true, superpuestas = [] }) {
+  const vista = pagina.getViewport({ scale: anchoPx ? anchoPx / pagina.getViewport({ scale: 1 }).width : escala });
+  const ancho = Math.max(1, Math.round(vista.width));
+  const alto = Math.max(1, Math.round(vista.height));
+  const lienzo = await crearLienzo(ancho, alto);
+  const contexto = lienzo.getContext("2d", { willReadFrequently: true }); // se leen sus píxeles
+  contexto.fillStyle = "#ffffff";
+  contexto.fillRect(0, 0, ancho, alto);
+  await pagina.render({
+    canvas: EN_NAVEGADOR ? lienzo : null,
+    canvasContext: contexto,
+    viewport: vista,
+    background: "#ffffff",
+    annotationMode: anotaciones ? pdfjs.AnnotationMode.ENABLE : pdfjs.AnnotationMode.DISABLE,
+  }).promise;
+  for (const sitio of superpuestas) {
+    const z = vista.scale;
+    contexto.drawImage(sitio.imagen, sitio.x * z, sitio.y * z, sitio.ancho * z, sitio.alto * z);
+  }
+  const { data } = contexto.getImageData(0, 0, ancho, alto);
+  pagina.cleanup();
+  return { ancho, alto, datos: new Uint8ClampedArray(data.buffer, data.byteOffset, data.length) };
+}
+
+/** Abre el PDF con pdf.js, hace `accion(documento)` y lo cierra. */
+async function conDocumento(pdf, accion) {
   // pdf.js se queda con los bytes que se le pasan (los manda a su "worker"): se le da una copia
   const tarea = pdfjs.getDocument({ data: pdf.slice(), ...(await opciones()) });
-  const documento = await tarea.promise;
   try {
-    const pagina = await documento.getPage(indice + 1);
-    const vista = pagina.getViewport({ scale: anchoPx ? anchoPx / pagina.getViewport({ scale: 1 }).width : escala });
-    const ancho = Math.max(1, Math.round(vista.width));
-    const alto = Math.max(1, Math.round(vista.height));
-    const lienzo = await crearLienzo(ancho, alto);
-    const contexto = lienzo.getContext("2d");
-    contexto.fillStyle = "#ffffff";
-    contexto.fillRect(0, 0, ancho, alto);
-    await pagina.render({
-      canvas: EN_NAVEGADOR ? lienzo : null,
-      canvasContext: contexto,
-      viewport: vista,
-      background: "#ffffff",
-      annotationMode: anotaciones ? pdfjs.AnnotationMode.ENABLE : pdfjs.AnnotationMode.DISABLE,
-    }).promise;
-    const { data } = contexto.getImageData(0, 0, ancho, alto);
-    pagina.cleanup();
-    return { ancho, alto, datos: new Uint8ClampedArray(data.buffer, data.byteOffset, data.length) };
+    return await accion(await tarea.promise);
   } finally {
     await tarea.destroy();
   }
 }
 
+/**
+ * Dibuja la página `indice` (desde 0) del PDF a `escala` píxeles por punto (o de `anchoPx` de
+ * ancho), sobre blanco. Con `anotaciones: false` solo se dibuja el contenido de la página.
+ */
+export async function renderizar(pdf, { indice = 0, ...opcionesDibujo } = {}) {
+  return conDocumento(pdf, async (documento) => dibujar(await documento.getPage(indice + 1), opcionesDibujo));
+}
+
 /** Imagen (BMP) de la primera página, de `anchoPx` píxeles de ancho, para la vista previa. */
 export async function miniatura(pdf, anchoPx) {
   return bmp(await renderizar(pdf, { anchoPx }));
+}
+
+/**
+ * Imágenes (BMP) de todas las páginas, de `anchoPx` de ancho. Se abre el documento una sola vez:
+ * las páginas comparten fuentes e imágenes y así se preparan solo una vez.
+ */
+export async function miniaturas(pdf, anchoPx, superpuestas = []) {
+  return conDocumento(pdf, (documento) =>
+    Promise.all(Array.from({ length: documento.numPages }, async (_, i) =>
+      bmp(await dibujar(await documento.getPage(i + 1), { anchoPx, superpuestas: superpuestas[i] ?? [] })))),
+  );
 }

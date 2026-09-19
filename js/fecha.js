@@ -14,7 +14,6 @@
 import { interpretar, lineasDeGlifos } from "./lector.js";
 import {
   PDFDict,
-  PDFDocument,
   PDFName,
   PDFRef,
   PDFStream,
@@ -24,7 +23,6 @@ import {
   cambiarContenido,
   comoArray,
   comoNombre,
-  guardar,
   heredado,
   nombreBase,
   numero,
@@ -53,13 +51,17 @@ export function fechaDeHoy(hoy = new Date()) {
  * Una sola pasada por todo el documento que saca a la vez:
  * - `glifos`: para cada fuente, qué glifo y anchura usa para cada carácter (para escribir la fecha);
  * - `textos`: los caracteres de cada página en el orden en que se dibujan, sin espacios (para
- *   encontrar las hojas por su título).
+ *   encontrar las hojas por su título);
+ * - `porPagina`: las letras de cada página (sin las anotaciones), para no volver a leerlas.
  */
 export function recorrerTexto(doc) {
   const glifos = {};
   const textos = [];
+  const porPagina = [];
   for (const pagina of doc.getPages()) {
-    const { glifos: dibujados } = interpretar(doc, pagina, { anotaciones: true });
+    const lectura = interpretar(doc, pagina, { anotaciones: true });
+    const dibujados = lectura.glifos;
+    porPagina.push(dibujados.slice(0, lectura.finPagina));
     let texto = "";
     for (const glifo of dibujados) {
       for (const letra of glifo.c) if (letra.codePointAt(0) > 32) texto += letra;
@@ -70,15 +72,24 @@ export function recorrerTexto(doc) {
     }
     textos.push(texto);
   }
-  return { glifos, textos };
+  return { glifos, textos, porPagina };
 }
 
-/** PDF (una hoja) con la fecha de la línea "En …" sustituida por `fecha`. */
-export async function cambiarFecha(pdf, fecha, glifos) {
-  const doc = await PDFDocument.load(pdf, { updateMetadata: false });
-  const pagina = doc.getPage(0);
+/**
+ * Lo que hace falta saber de una hoja para cambiarle la fecha (sus letras, sus operadores y la línea
+ * de la fecha). No cambia al cambiar la fecha, así que se lee una vez y se reutiliza.
+ */
+export function leerHoja(doc, pagina) {
   const lectura = interpretar(doc, pagina);
-  const linea = lineaConFecha(lineasDeGlifos(lectura.glifos));
+  return { lectura, linea: lineaConFecha(lineasDeGlifos(lectura.glifos)) };
+}
+
+/**
+ * Cambia en la página (de un documento abierto con pdf-lib) la fecha de la línea "En …" por `fecha`.
+ * `hoja` es lo que devuelve `leerHoja` para esa misma página sin modificar.
+ */
+export function ponerFechaEnPagina(doc, pagina, fecha, glifos, hoja) {
+  const { lectura, linea } = hoja;
   if (!linea) throw new FechaNoCambiada("no se ha encontrado la fecha en la hoja.");
 
   const primero = linea.chars[linea.inicio];
@@ -125,7 +136,6 @@ export async function cambiarFecha(pdf, fecha, glifos) {
   }
   operadores.push("ET Q");
   anadirContenido(doc, pagina, operadores.join(" "));
-  return guardar(doc);
 }
 
 function lineaConFecha(lineas) {

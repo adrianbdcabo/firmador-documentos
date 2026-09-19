@@ -1,4 +1,4 @@
-/* © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE). */
+/* © 2026 Adrián Barroso de Cabo. Todos los derechos reservados (ver LICENSE). */
 :root {
   --fondo: #f6f6f4;
   --superficie: #ffffff;
@@ -220,7 +220,7 @@ button, label { -webkit-tap-highlight-color: transparent; }
   .tarjeta { padding: 6px 6px 8px; gap: 6px; }
   .tarjeta .leyenda { flex-direction: column; align-items: flex-start; }
   .tarjeta .detalle { font-size: 11.5px; }
-  .pila { min-height: 0; height: 62vh; max-height: 560px; }
+  .pila { flex: none; min-height: 0; height: 62vh; max-height: 560px; } /* sin "flex: none" la columna la deja a 0 de alto */
   .pila .etiqueta { font-size: 11.5px; }
   .pila .etiqueta strong { font-size: 13px; }
 
