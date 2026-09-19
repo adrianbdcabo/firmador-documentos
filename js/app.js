@@ -1,11 +1,11 @@
-// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
+// © 2026 Adrián Barroso de Cabo.
 // Interfaz: cargar el documento laboral (y, si hace falta, la firma y el sello), previsualizar y descargar.
 
 import { documentosDe, ESPECIALES, generar } from "./especiales.js";
 import { fechaDeHoy } from "./fecha.js";
 import * as firmas from "./firma.js";
 import { calentar, ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
-import { miniatura } from "./pdfutil.js";
+import { miniatura } from "./render.js";
 
 const $ = (id) => document.getElementById(id);
 const RUTA_SELLO = "recursos/sello-temps.jpeg"; // el sello viene con la web: no hay que cargarlo
@@ -49,7 +49,7 @@ async function cargarDocumento(archivo) {
   // Si lo que se carga es una hoja suelta ya firmada (INFO, EPI o REN), se usa como firma.
   let hojaFirmada = null;
   try {
-    hojaFirmada = firmas.deHojaSuelta(datos, archivo.name);
+    hojaFirmada = await firmas.deHojaSuelta(datos, archivo.name);
   } catch {
     hojaFirmada = null; // no es un PDF válido: que lo diga el procesado normal
   }
@@ -86,7 +86,7 @@ async function procesarDocumento({ mantenerVista = false } = {}) {
   let resultado;
   try {
     const sello = $("con-sello").checked ? estado.sello : null;
-    resultado = procesar(datos, { fecha: fechaElegida(), imagenFirma: estado.firma?.imagen, sello });
+    resultado = await procesar(datos, { fecha: fechaElegida(), imagenFirma: estado.firma?.imagen, sello });
   } catch (error) {
     if (mantenerVista) limpiar();
     if (error instanceof FirmaNoEncontrada) {
@@ -166,7 +166,7 @@ async function usarFirma(obtener) {
   await pausa();
   let firma;
   try {
-    firma = obtener();
+    firma = await obtener();
   } catch (error) {
     ponerEstado("");
     await alerta("No se ha podido cargar la firma", error instanceof ErrorProcesado ? error.message : `Ha ocurrido un error inesperado:\n${error}`);
@@ -226,9 +226,9 @@ async function cambiarFecha() {
   ponerEstado("Cambiando la fecha…");
   await pausa();
   try {
-    estado.resultado.ponerFecha(fechaElegida());
+    await estado.resultado.ponerFecha(fechaElegida());
   } catch (error) {
-    estado.resultado.ponerFecha(null);
+    await estado.resultado.ponerFecha(null);
     $("fecha-hoy").checked = false;
     await alerta("Error inesperado", `No se ha podido cambiar la fecha:\n${error}`);
   }
@@ -278,14 +278,14 @@ function firmaId(firma) {
 
 // Vistas previas
 
-function urlMiniatura(pdf, ancho) {
+async function urlMiniatura(pdf, ancho) {
   const clave = `${ancho}`;
   let porPdf = estado.urls.get(pdf);
   if (!porPdf) {
     porPdf = new Map();
     estado.urls.set(pdf, porPdf);
   }
-  if (!porPdf.has(clave)) porPdf.set(clave, URL.createObjectURL(new Blob([miniatura(pdf, ancho)], { type: "image/bmp" })));
+  if (!porPdf.has(clave)) porPdf.set(clave, URL.createObjectURL(new Blob([await miniatura(pdf, ancho)], { type: "image/bmp" })));
   return porPdf.get(clave);
 }
 
@@ -336,7 +336,7 @@ async function mostrarTarjetas() {
   const { resultado } = estado;
   const contenedor = $("tarjetas");
   const ancho = Math.round(300 * (window.devicePixelRatio || 1));
-  const urls = await Promise.all(resultado.hojas.map((hoja) => precargar(urlMiniatura(hoja.pdf, ancho))));
+  const urls = await Promise.all(resultado.hojas.map(async (hoja) => precargar(await urlMiniatura(hoja.pdf, ancho))));
 
   // Se reutilizan las tarjetas que ya están puestas: así no desaparecen y vuelven a aparecer.
   if (contenedor.children.length !== resultado.hojas.length) {
@@ -392,7 +392,7 @@ async function colocarPila() {
   const y0 = Math.max(4, (pila.clientHeight - alto - desfase * (n - 1)) / 2);
   const resolucion = Math.round(ancho * (window.devicePixelRatio || 1));
 
-  const urls = await Promise.all(resultado.hojas.map((hoja) => precargar(urlMiniatura(hoja.pdf, resolucion))));
+  const urls = await Promise.all(resultado.hojas.map(async (hoja) => precargar(await urlMiniatura(hoja.pdf, resolucion))));
 
   // Se reutilizan las hojas ya puestas (una hoja y su etiqueta por cada una) para que no parpadeen.
   if (pila.children.length !== n * 2) {
@@ -442,10 +442,10 @@ async function descargar(archivos) {
   ponerEstado(`✓ Descargado: ${archivos.map(([nombre]) => nombre).join(", ")}`, true);
 }
 
-function descargarTodo() {
+async function descargarTodo() {
   const { resultado } = estado;
   if (!resultado) return;
-  if (estado.modo === "pack") descargar([[`PACK - ${resultado.trabajador}.pdf`, resultado.pack()]]);
+  if (estado.modo === "pack") descargar([[`PACK - ${resultado.trabajador}.pdf`, await resultado.pack()]]);
   else descargar(resultado.hojas.map((hoja) => [`${hoja.clave} - ${resultado.trabajador}.pdf`, hoja.pdf]));
 }
 
@@ -478,7 +478,7 @@ async function descargarEspecial(especial) {
     datos.sello = await cargarSello();
     const archivos = [];
     for (const documento of documentosDe(especial)) {
-      archivos.push([documento.archivo(datos), generar(documento, await plantillaDe(documento.plantilla), datos)]);
+      archivos.push([documento.archivo(datos), await generar(documento, await plantillaDe(documento.plantilla), datos)]);
     }
     await descargar(archivos);
   } catch (error) {
@@ -633,8 +633,8 @@ function iniciar() {
  */
 async function calentarMotor() {
   try {
-    const pdf = calentar(await plantillaDe(RUTA_CALENTAR), await cargarSello());
-    miniatura(pdf, 300);
+    const pdf = await calentar(await plantillaDe(RUTA_CALENTAR), await cargarSello());
+    await miniatura(pdf, 300);
   } catch {
     // sin conexión o sin la plantilla: el primer documento irá un poco más lento, sin más
   }

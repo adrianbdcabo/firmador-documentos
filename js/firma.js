@@ -1,8 +1,9 @@
-// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
+// © 2026 Adrián Barroso de Cabo.
 // La firma que se pega en las hojas: sacada de un PDF firmado o de una captura de pantalla.
 
+import { aplanarSobreBlanco, cajaConTinta, decodificar, png, recortar } from "./imagenes.js";
 import { campoFirma, capturarFirma, firmaDeHoja, firmante, localizarHojas } from "./pdf.js";
-import { ErrorProcesado, FirmaNoEncontrada, abrirPdf, cajaConTinta, mupdf, renderRecorte } from "./pdfutil.js";
+import { ErrorProcesado, FirmaNoEncontrada, abrirPdf } from "./pdfbase.js";
 
 const MARGEN_CAPTURA_PX = 3;
 
@@ -23,77 +24,49 @@ export class Firma {
 }
 
 /** Firma de un PDF: la digital si la tiene y, si no, la que lleva pegada una hoja ya hecha. */
-export function desdePdf(datos, origen) {
-  const doc = abrirPdf(datos);
-  try {
-    if (campoFirma(doc)) {
-      const [nombre, nif] = firmante(doc);
-      return new Firma(capturarFirma(doc), origen, nombre, nif);
-    }
-    const deHoja = firmaDeHoja(doc);
-    if (deHoja) return new Firma(deHoja.imagen, origen, deHoja.nombre, deHoja.nif);
-    throw new FirmaNoEncontrada(
-      "Ese PDF no tiene firma digital ni es una hoja ya firmada (INFO, EPI o REN) de la que copiar la firma.",
-    );
-  } finally {
-    doc.destroy();
+export async function desdePdf(datos, origen) {
+  const doc = await abrirPdf(datos);
+  if (campoFirma(doc)) {
+    const [nombre, nif] = firmante(doc);
+    return new Firma(await capturarFirma(doc), origen, nombre, nif);
   }
+  const deHoja = await firmaDeHoja(doc);
+  if (deHoja) return new Firma(deHoja.imagen, origen, deHoja.nombre, deHoja.nif);
+  throw new FirmaNoEncontrada(
+    "Ese PDF no tiene firma digital ni es una hoja ya firmada (INFO, EPI o REN) de la que copiar la firma.",
+  );
 }
 
 const PAGINAS_HOJA_SUELTA = 3; // el documento global tiene muchas más
 
 /** Si el PDF es una hoja suelta ya firmada (y no el documento global), su firma; si no, null. */
-export function deHojaSuelta(datos, origen) {
-  const doc = abrirPdf(datos);
+export async function deHojaSuelta(datos, origen) {
+  const doc = await abrirPdf(datos);
+  if (doc.getPageCount() > PAGINAS_HOJA_SUELTA) return null;
   try {
-    if (doc.countPages() > PAGINAS_HOJA_SUELTA) return null;
-    try {
-      localizarHojas(doc); // si están las 3, es un documento laboral, no una hoja suelta
-      return null;
-    } catch {
-      const deHoja = firmaDeHoja(doc);
-      return deHoja ? new Firma(deHoja.imagen, origen, deHoja.nombre, deHoja.nif) : null;
-    }
-  } finally {
-    doc.destroy();
+    localizarHojas(doc); // si están las 3, es un documento laboral, no una hoja suelta
+    return null;
+  } catch {
+    const deHoja = await firmaDeHoja(doc);
+    return deHoja ? new Firma(deHoja.imagen, origen, deHoja.nombre, deHoja.nif) : null;
   }
 }
 
 /** Firma a partir de una captura: se aplana sobre blanco y se recorta el margen vacío. */
-export function desdeImagen(datos, origen) {
-  const pagina = paginaConImagen(datos, "No se puede leer la imagen. Usa un PDF firmado o una captura en PNG o JPG.");
-  try {
-    const pix = pagina.toPixmap(mupdf.Matrix.identity, mupdf.ColorSpace.DeviceRGB, false);
-    const caja = cajaConTinta(pix);
-    const [, , ancho, alto] = pagina.getBounds();
-    pix.destroy();
-    if (!caja) throw new ErrorProcesado("La imagen está en blanco: no se ve ninguna firma.");
-    const m = MARGEN_CAPTURA_PX;
-    const recorte = [Math.max(0, caja[0] - m), Math.max(0, caja[1] - m), Math.min(ancho, caja[2] + m), Math.min(alto, caja[3] + m)];
-    return new Firma(renderRecorte((dispositivo, matriz) => pagina.run(dispositivo, matriz), mupdf.Matrix.identity, recorte), origen);
-  } finally {
-    pagina.destroy();
-  }
-}
-
-function paginaConImagen(datos, mensajeError) {
+export async function desdeImagen(datos, origen) {
   let imagen;
   try {
-    imagen = new mupdf.Image(datos instanceof Uint8Array ? datos : new Uint8Array(datos));
-    if (!imagen.getWidth() || !imagen.getHeight()) throw new Error("vacía");
+    imagen = await decodificar(datos instanceof Uint8Array ? datos : new Uint8Array(datos));
+    if (!imagen.ancho || !imagen.alto) throw new Error("vacía");
   } catch {
-    throw new ErrorProcesado(mensajeError);
+    throw new ErrorProcesado("No se puede leer la imagen. Usa un PDF firmado o una captura en PNG o JPG.");
   }
-  const ancho = imagen.getWidth();
-  const alto = imagen.getHeight();
-  const doc = new mupdf.PDFDocument();
-  const recursos = doc.newDictionary();
-  const xobjects = doc.newDictionary();
-  xobjects.put("Im0", doc.addImage(imagen));
-  recursos.put("XObject", xobjects);
-  doc.insertPage(-1, doc.addPage([0, 0, ancho, alto], 0, recursos, `q ${ancho} 0 0 ${alto} 0 0 cm /Im0 Do Q`));
-  imagen.destroy();
-  return doc.loadPage(0); // la página mantiene vivo el documento
+  const sobreBlanco = aplanarSobreBlanco(imagen);
+  const caja = cajaConTinta(sobreBlanco);
+  if (!caja) throw new ErrorProcesado("La imagen está en blanco: no se ve ninguna firma.");
+  const m = MARGEN_CAPTURA_PX;
+  const recorte = [Math.max(0, caja[0] - m), Math.max(0, caja[1] - m), Math.min(imagen.ancho, caja[2] + m), Math.min(imagen.alto, caja[3] + m)];
+  return new Firma(png(recortar(sobreBlanco, recorte)), origen);
 }
 
 function identificador(texto) {

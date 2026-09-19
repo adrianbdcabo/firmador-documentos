@@ -1,17 +1,18 @@
-// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
+// © 2026 Adrián Barroso de Cabo.
 // Documentos especiales de plataformas: plantillas que se rellenan con los datos del trabajador.
 //
 // Para añadir uno nuevo basta con copiar su plantilla en plantillas/ y añadir aquí su ficha:
 // el texto del botón, el archivo, la página que se rellena y dónde va cada dato. Si una plataforma
 // pide varios documentos, su ficha lleva "documentos": una lista con plantilla, archivo, página y
 // campos de cada uno, y el botón los descarga todos.
-// Las coordenadas son las de MuPDF (origen arriba a la izquierda) y la "y" es la línea base del texto.
+// Las coordenadas son en puntos con el origen arriba a la izquierda y la "y" es la línea base del texto.
 // Cada texto puede llevar "fuente" (una de las 14 estándar de PDF; por defecto Helvetica) y
 // "centrado": true, y entonces la "x" es el centro del texto en vez de su inicio. Con "lineas": N
 // el texto se parte por palabras en hasta N líneas si no cabe en una ("interlineado", distancia entre ellas).
 
 import { fechaDeHoy, MESES } from "./fecha.js";
-import { anadirContenido, anadirRecurso, aPdf, guardar, mupdf, numero } from "./pdfutil.js";
+import { StandardFonts } from "../vendor/pdf-lib/pdf-lib.esm.min.js";
+import { PDFDocument, aPdf, anadirContenido, anadirRecurso, guardar, incrustarImagen, invertir, multiplicar, numero, transformacion } from "./pdfbase.js";
 
 const TAMANO_MINIMO = 6; // si el texto no cabe, se encoge hasta aquí
 
@@ -172,67 +173,78 @@ export function documentosDe(especial) {
 }
 
 /** PDF de un documento especial relleno con los datos del trabajador. */
-export function generar(especial, plantilla, datos) {
-  const doc = new mupdf.PDFDocument(plantilla);
-  try {
-    const indice = especial.pagina < 0 ? doc.countPages() + especial.pagina : especial.pagina;
-    const pagina = doc.loadPage(indice);
-    const objetoPagina = pagina.getObject();
+export async function generar(especial, plantilla, datos) {
+  const doc = await PDFDocument.load(plantilla, { updateMetadata: false });
+  const indice = especial.pagina < 0 ? doc.getPageCount() + especial.pagina : especial.pagina;
+  const pagina = doc.getPage(indice);
 
-    // Solo fuentes de las 14 estándar, que todo lector de PDF tiene
-    const fuentes = new Map();
-    const fuenteDe = (nombre = "Helvetica") => {
-      if (!fuentes.has(nombre)) {
-        const fuente = new mupdf.Font(nombre);
-        const recurso = anadirRecurso(doc, objetoPagina, "Font", "FEspecial", doc.addSimpleFont(fuente, "Latin"));
-        fuentes.set(nombre, { fuente, recurso });
-      }
-      return fuentes.get(nombre);
-    };
-
-    const operadores = [];
-    for (const campo of especial.campos) {
-      if (campo.imagen) {
-        pegarImagen(doc, pagina, objetoPagina, campo.imagen(datos), campo, operadores);
-        continue;
-      }
-      const texto = (campo.valor(datos) ?? "").trim();
-      if (!texto) continue;
-      const { fuente, recurso } = fuenteDe(campo.fuente);
-      const { tamano, lineas } = repartir(fuente, texto, campo);
-      lineas.forEach((linea, i) => {
-        // Si ni con la letra más pequeña cabe, se estrecha el texto hasta que quepa
-        const anchoTexto = anchoDelTexto(fuente, linea, tamano);
-        const estrechar = Math.min(1, campo.ancho / anchoTexto);
-        const inicio = campo.centrado ? campo.x - (anchoTexto * estrechar) / 2 : campo.x;
-        const [x, y] = aPdf(pagina, [inicio, campo.y + i * (campo.interlineado ?? tamano * 1.2)]);
-        const tz = estrechar < 1 ? `${numero(estrechar * 100)} Tz ` : "";
-        operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf ${tz}1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escapar(linea)}) Tj ET Q`);
-      });
+  // Solo fuentes de las 14 estándar, que todo lector de PDF tiene
+  const fuentes = new Map();
+  const fuenteDe = async (nombre = "Helvetica") => {
+    if (!fuentes.has(nombre)) {
+      const fuente = await doc.embedFont(FUENTES[nombre] ?? StandardFonts.Helvetica);
+      const recurso = anadirRecurso(doc, pagina, "Font", "FEspecial", fuente.ref);
+      fuentes.set(nombre, { fuente, recurso });
     }
-    anadirContenido(doc, objetoPagina, operadores.join("\n"));
-    return guardar(doc);
-  } finally {
-    doc.destroy();
+    return fuentes.get(nombre);
+  };
+
+  const operadores = [];
+  for (const campo of especial.campos) {
+    if (campo.imagen) {
+      await pegarImagen(doc, pagina, campo.imagen(datos), campo, operadores);
+      continue;
+    }
+    const texto = (campo.valor(datos) ?? "").trim();
+    if (!texto) continue;
+    const { fuente, recurso } = await fuenteDe(campo.fuente);
+    const { tamano, lineas } = repartir(fuente, texto, campo);
+    lineas.forEach((linea, i) => {
+      // Si ni con la letra más pequeña cabe, se estrecha el texto hasta que quepa
+      const anchoTexto = anchoDelTexto(fuente, linea, tamano);
+      const estrechar = Math.min(1, campo.ancho / anchoTexto);
+      const inicio = campo.centrado ? campo.x - (anchoTexto * estrechar) / 2 : campo.x;
+      const [x, y] = aPdf(doc, pagina, [inicio, campo.y + i * (campo.interlineado ?? tamano * 1.2)]);
+      const tz = estrechar < 1 ? `${numero(estrechar * 100)} Tz ` : "";
+      operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf ${tz}1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escapar(linea)}) Tj ET Q`);
+    });
   }
+  anadirContenido(doc, pagina, operadores.join("\n"));
+  return guardar(doc);
 }
 
-function pegarImagen(doc, pagina, objetoPagina, bytes, campo, operadores) {
+const FUENTES = {
+  Helvetica: StandardFonts.Helvetica,
+  "Helvetica-Bold": StandardFonts.HelveticaBold,
+  "Helvetica-Oblique": StandardFonts.HelveticaOblique,
+  "Helvetica-BoldOblique": StandardFonts.HelveticaBoldOblique,
+  "Times-Roman": StandardFonts.TimesRoman,
+  "Times-Bold": StandardFonts.TimesRomanBold,
+  "Times-Italic": StandardFonts.TimesRomanItalic,
+  "Times-BoldItalic": StandardFonts.TimesRomanBoldItalic,
+  Courier: StandardFonts.Courier,
+  "Courier-Bold": StandardFonts.CourierBold,
+};
+
+async function pegarImagen(doc, pagina, bytes, campo, operadores) {
   if (!bytes) return;
-  const imagen = new mupdf.Image(bytes);
-  const escala = Math.min(campo.ancho / imagen.getWidth(), campo.alto / imagen.getHeight());
-  const ancho = imagen.getWidth() * escala;
-  const alto = imagen.getHeight() * escala;
-  const nombre = anadirRecurso(doc, objetoPagina, "XObject", "ImgEspecial", doc.addImage(imagen));
-  const matriz = mupdf.Matrix.concat([ancho, 0, 0, -alto, campo.x, campo.y + alto], mupdf.Matrix.invert(pagina.getTransform()));
+  const imagen = await incrustarImagen(doc, bytes);
+  const escala = Math.min(campo.ancho / imagen.ancho, campo.alto / imagen.alto);
+  const ancho = imagen.ancho * escala;
+  const alto = imagen.alto * escala;
+  const nombre = anadirRecurso(doc, pagina, "XObject", "ImgEspecial", imagen.ref);
+  const matriz = multiplicar([ancho, 0, 0, -alto, campo.x, campo.y + alto], invertir(transformacion(doc, pagina)));
   operadores.push(`q ${matriz.map(numero).join(" ")} cm /${nombre} Do Q`);
-  imagen.destroy();
 }
 
+/**
+ * Ancho del texto con esa fuente y tamaño, letra a letra: el PDF se dibuja sin ajustes entre pares
+ * de letras (kerning), así que no se tienen en cuenta. Solo cuentan las letras que se pueden escribir.
+ */
 function anchoDelTexto(fuente, texto, tamano) {
   let total = 0;
-  for (const caracter of texto) total += fuente.advanceGlyph(fuente.encodeCharacter(caracter.codePointAt(0)));
-  return total * tamano;
+  for (const caracter of texto) if (winAnsi(caracter) !== null) total += fuente.widthOfTextAtSize(caracter, tamano);
+  return total;
 }
 
 /**

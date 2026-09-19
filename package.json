@@ -11,8 +11,14 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.9",
+    "esbuild": "^0.28.2",
+    "fast-png": "^8.0.0",
     "http-server": "^14.1.1",
+    "jpeg-js": "^0.4.4",
     "mupdf": "^1.28.1",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.3.289",
     "playwright-core": "^1.63.0",
     "wrangler": "^4.135.0"
   }
