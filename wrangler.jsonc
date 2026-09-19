@@ -1,0 +1,10 @@
+// Publicación en Cloudflare (Worker con archivos estáticos): `npm run deploy`.
+// Solo se sube dist/, que prepara scripts/preparar-dist.mjs con los archivos de la web.
+{
+  "name": "firmador-documentos",
+  "compatibility_date": "2026-09-18",
+  "assets": { "directory": "./dist" },
+  "workers_dev": true,
+  // Sin direcciones de vista previa por versión: no pasarían por el control de acceso
+  "preview_urls": false
+}

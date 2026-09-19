@@ -1,3 +1,4 @@
+// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
 // La firma que se pega en las hojas: sacada de un PDF firmado o de una captura de pantalla.
 
 import { campoFirma, capturarFirma, firmaDeHoja, firmante, localizarHojas } from "./pdf.js";

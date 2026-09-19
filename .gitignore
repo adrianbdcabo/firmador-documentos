@@ -8,3 +8,11 @@ node_modules/
 *.jpeg
 *.bmp
 !recursos/*.jpeg
+
+# Cloudflare (wrangler) y la carpeta que se publica
+dist/
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example

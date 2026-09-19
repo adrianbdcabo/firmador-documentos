@@ -1,3 +1,4 @@
+// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
 // Interfaz: cargar el documento laboral (y, si hace falta, la firma y el sello), previsualizar y descargar.
 
 import { documentosDe, ESPECIALES, generar } from "./especiales.js";

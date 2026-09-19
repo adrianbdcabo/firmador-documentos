@@ -1,3 +1,4 @@
+// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
 // Documentos especiales de plataformas: plantillas que se rellenan con los datos del trabajador.
 //
 // Para añadir uno nuevo basta con copiar su plantilla en plantillas/ y añadir aquí su ficha:

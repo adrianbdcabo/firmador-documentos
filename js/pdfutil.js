@@ -1,3 +1,4 @@
+// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
 // Utilidades comunes sobre MuPDF.js: abrir y guardar PDFs, añadir contenido y recortar renders.
 
 import * as mupdf from "../vendor/mupdf/mupdf.js";

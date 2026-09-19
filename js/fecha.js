@@ -1,3 +1,4 @@
+// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
 // Cambiar la fecha de "En COSLADA, a 16 de Septiembre de 2026" por otra con idéntica apariencia.
 //
 // La fecha se borra y se vuelve a escribir en la misma posición, tamaño y color con la MISMA

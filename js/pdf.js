@@ -1,3 +1,4 @@
+// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
 // Lógica principal: localiza las hojas, captura la firma digital y pega firma y sello.
 
 import * as config from "./config.js";

@@ -1,3 +1,4 @@
+// © 2026 Adrián Barroso de Cabo. Licencia AGPL-3.0 (ver LICENSE).
 // Qué hojas se extraen y dónde se pega la firma y el sello en cada una.
 //
 // Coordenadas en puntos PDF con origen arriba a la izquierda (como MuPDF).

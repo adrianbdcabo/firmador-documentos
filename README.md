@@ -1,5 +1,7 @@
 # Firmador de documentos laborales
 
+Creado por **Adrián Barroso de Cabo**. © 2026 Adrián Barroso de Cabo.
+
 Página web que coge el documento laboral (global), saca las 3 hojas que hay que enviar
 (INFO, EPI y REN), pega en cada una la firma del trabajador debajo de su nombre y el sello
 de la empresa, y las descarga en PDF.
@@ -64,7 +66,9 @@ npm test
 Para actualizar MuPDF.js: `npm install mupdf@latest` y copiar `mupdf.js`, `mupdf-wasm.js`
 y `mupdf-wasm.wasm` de `node_modules/mupdf/dist/` a `vendor/mupdf/`.
 
-## Licencia
+## Autoría y licencia
+
+Copyright © 2026 Adrián Barroso de Cabo. Autor y titular de los derechos de este programa.
 
 Usa [MuPDF.js](https://github.com/ArtifexSoftware/mupdf.js), con licencia AGPL-3.0, por lo
 que este proyecto se distribuye también bajo la [AGPL-3.0](LICENSE).
