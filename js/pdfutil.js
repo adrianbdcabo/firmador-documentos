@@ -60,13 +60,15 @@ export function rectDeQuad(q) {
 export function lineasDeTexto(pagina) {
   const lineas = [];
   let actual = null;
+  const nombres = new Map(); // el nombre de cada fuente se pide una sola vez
   const texto = pagina.toStructuredText("preserve-whitespace");
   texto.walk({
     beginLine(bbox) {
       actual = { bbox, chars: [] };
     },
     onChar(c, origin, font, size, quad, color) {
-      actual?.chars.push({ c, origen: origin, rect: rectDeQuad(quad), fuente: font.getName(), tamano: size, color });
+      if (!nombres.has(font.pointer)) nombres.set(font.pointer, font.getName());
+      actual?.chars.push({ c, origen: origin, rect: rectDeQuad(quad), fuente: nombres.get(font.pointer), tamano: size, color });
     },
     endLine() {
       if (actual) lineas.push(actual);
@@ -174,6 +176,10 @@ export function renderRecorte(ejecutar, matriz, caja) {
   }
 }
 
+/**
+ * Imagen (BMP) de la primera página para la vista previa. BMP y no PNG porque no hay que
+ * comprimirla: se genera casi al instante y el navegador la muestra igual.
+ */
 export function miniatura(datosPdf, anchoPx) {
   const doc = new mupdf.PDFDocument(datosPdf);
   const pagina = doc.loadPage(0);
@@ -181,10 +187,37 @@ export function miniatura(datosPdf, anchoPx) {
   const zoom = anchoPx / (x1 - x0);
   const pix = pagina.toPixmap(mupdf.Matrix.scale(zoom, zoom), RGB, false, true);
   try {
-    return pix.asPNG().slice();
+    return comoBmp(pix.getWidth(), pix.getHeight(), pix.getStride(), pix.getPixels());
   } finally {
     pix.destroy();
     pagina.destroy();
     doc.destroy();
   }
+}
+
+/** BMP de 24 bits (filas de arriba abajo) a partir de los píxeles RGB de un pixmap. */
+function comoBmp(ancho, alto, zancada, rgb) {
+  const fila = (ancho * 3 + 3) & ~3; // cada fila ocupa un múltiplo de 4 bytes
+  const cabecera = 54;
+  const bytes = new Uint8Array(cabecera + fila * alto);
+  const vista = new DataView(bytes.buffer);
+  bytes[0] = 0x42; // "BM"
+  bytes[1] = 0x4d;
+  vista.setUint32(2, bytes.length, true);
+  vista.setUint32(10, cabecera, true);
+  vista.setUint32(14, 40, true); // BITMAPINFOHEADER
+  vista.setInt32(18, ancho, true);
+  vista.setInt32(22, -alto, true); // negativo: la primera fila es la de arriba
+  vista.setUint16(26, 1, true);
+  vista.setUint16(28, 24, true);
+  for (let y = 0; y < alto; y++) {
+    let origen = y * zancada;
+    let destino = cabecera + y * fila;
+    for (let x = 0; x < ancho; x++, origen += 3, destino += 3) {
+      bytes[destino] = rgb[origen + 2]; // el BMP guarda azul, verde, rojo
+      bytes[destino + 1] = rgb[origen + 1];
+      bytes[destino + 2] = rgb[origen];
+    }
+  }
+  return bytes;
 }

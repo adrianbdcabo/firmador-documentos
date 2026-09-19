@@ -1,7 +1,7 @@
 // Lógica principal: localiza las hojas, captura la firma digital y pega firma y sello.
 
 import * as config from "./config.js";
-import { FechaNoCambiada, cambiarFecha, glifosDelDocumento } from "./fecha.js";
+import { FechaNoCambiada, cambiarFecha, recorrerTexto } from "./fecha.js";
 import {
   ErrorProcesado,
   FirmaNoEncontrada,
@@ -74,8 +74,10 @@ export class Resultado {
 export function procesar(datos, { fecha = null, imagenFirma = null, sello = null } = {}) {
   const doc = abrirPdf(datos);
   try {
-    const paginas = localizarHojas(doc);
+    const { glifos, textos } = recorrerTexto(doc);
+    const paginas = localizarHojas(doc, textos);
     const firma = imagenFirma ?? capturarFirma(doc);
+    const imagenes = new ImagenesComprimidas({ firma, sello });
     const hojas = [];
     let trabajador = "";
 
@@ -87,10 +89,11 @@ export function procesar(datos, { fecha = null, imagenFirma = null, sello = null
       salida.findPage(0).delete("Annots");
       const pagina = salida.loadPage(0);
 
-      const ancla = buscarAncla(pagina, hoja.ladoAncla);
-      if (hoja.clave === config.HOJA_NOMBRE) trabajador = nombreTrabajador(pagina, ancla);
-      pegarImagen(salida, pagina, firma, hoja.firma, config.CAJA_FIRMA, ancla);
-      if (hoja.sello && sello) pegarImagen(salida, pagina, sello, hoja.sello, config.CAJA_SELLO, ancla);
+      const lineas = lineasDeTexto(pagina);
+      const ancla = buscarAncla(pagina, hoja.ladoAncla, lineas);
+      if (hoja.clave === config.HOJA_NOMBRE) trabajador = nombreTrabajador(pagina, ancla, lineas);
+      pegarImagen(salida, pagina, imagenes.firma, hoja.firma, config.CAJA_FIRMA, ancla);
+      if (hoja.sello && sello) pegarImagen(salida, pagina, imagenes.sello, hoja.sello, config.CAJA_SELLO, ancla);
 
       hojas.push({ clave: hoja.clave, titulo: hoja.titulo, paginaOrigen: numeroPagina + 1, pdfOriginal: guardar(salida), pdf: null });
       pagina.destroy();
@@ -101,11 +104,12 @@ export function procesar(datos, { fecha = null, imagenFirma = null, sello = null
     const resultado = new Resultado(
       nombreParaArchivo(trabajador) || "TRABAJADOR",
       hojas,
-      glifosDelDocumento(doc),
+      glifos,
       dniDelTexto(textoHojas),
       puestoDelTexto(textoHojas),
       firma,
     );
+    imagenes.destroy();
     resultado.ponerFecha(fecha);
     return resultado;
   } finally {
@@ -113,14 +117,86 @@ export function procesar(datos, { fecha = null, imagenFirma = null, sello = null
   }
 }
 
+/**
+ * Ensayo con un PDF cualquiera de lo que se hace al procesar (leer el texto, recoger las letras,
+ * guardar con imágenes), para que el motor de PDF esté a punto antes del primer documento real.
+ */
+export function calentar(datos, imagen) {
+  const doc = abrirPdf(datos);
+  try {
+    recorrerTexto(doc);
+    textoPagina(doc.loadPage(0));
+    const salida = new mupdf.PDFDocument();
+    salida.graftPage(-1, doc, 0);
+    const pagina = salida.loadPage(0);
+    const imagenes = new ImagenesComprimidas({ imagen });
+    pegarImagen(salida, pagina, imagenes.imagen, { x: 0, y: 0 }, config.CAJA_FIRMA, buscarAncla(pagina, "izquierda"));
+    // Como al cambiar la fecha: borrar un trozo de texto (aquí, una esquina vacía)
+    pagina.createAnnotation("Redact").setRect([0, 0, 1, 1]);
+    pagina.applyRedactions(false, mupdf.PDFPage.REDACT_IMAGE_NONE, mupdf.PDFPage.REDACT_LINE_ART_NONE, mupdf.PDFPage.REDACT_TEXT_REMOVE);
+    // Los colores de los documentos laborales (CalRGB de JasperReports) y gris: la primera vez que
+    // aparecen, preparar su conversión es de lo que más tarda.
+    const calRGB = salida.addObject(["CalRGB", {
+      Gamma: [2.2, 2.2, 2.2],
+      WhitePoint: [0.95043, 1, 1.09],
+      Matrix: [0.41239, 0.21264, 0.01933, 0.35758, 0.71517, 0.11919, 0.18045, 0.07218, 0.9504],
+    }]);
+    const espacio = anadirRecurso(salida, pagina.getObject(), "ColorSpace", "CSCal", calRGB);
+    anadirContenido(salida, pagina.getObject(), `q /${espacio} cs 0.5 0.5 0.5 sc 0.5 g 0.5 G 0 0 1 1 re f Q`);
+    renderRecorte((dispositivo, m) => pagina.run(dispositivo, m), mupdf.Matrix.scale(2, 2), [0, 0, 200, 100]);
+    const pdf = guardar(salida);
+    imagenes.destroy();
+    salida.destroy();
+    const final = new mupdf.PDFDocument(pdf);
+    recorrerTexto(final);
+    final.destroy();
+    return pdf;
+  } finally {
+    doc.destroy();
+  }
+}
+
+/**
+ * La firma y el sello, comprimidos una sola vez en un PDF aparte para copiarlos ya comprimidos a
+ * cada hoja. Si se añadieran en cada hoja, al guardarla se volverían a comprimir las tres veces,
+ * que es de lo que más tarda al cargar un documento.
+ */
+class ImagenesComprimidas {
+  constructor(imagenes) {
+    const temporal = new mupdf.PDFDocument();
+    const datos = {};
+    for (const [clave, bytes] of Object.entries(imagenes)) {
+      if (!bytes) continue;
+      const imagen = new mupdf.Image(bytes);
+      datos[clave] = { numero: temporal.addImage(imagen).asIndirect(), ancho: imagen.getWidth(), alto: imagen.getHeight() };
+      imagen.destroy();
+    }
+    const buffer = temporal.saveToBuffer("compress"); // sin "garbage": se conservan los números de objeto
+    this.doc = new mupdf.PDFDocument(buffer.asUint8Array().slice());
+    buffer.destroy();
+    temporal.destroy();
+    for (const [clave, { numero, ancho, alto }] of Object.entries(datos)) {
+      this[clave] = { ref: this.doc.newIndirect(numero), ancho, alto };
+    }
+  }
+
+  destroy() {
+    this.doc.destroy();
+  }
+}
+
 export function normalizar(texto) {
   return texto.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").toUpperCase().trim();
 }
 
-/** Índice (base 0) de la página de cada hoja, buscándola por su título en todo el documento. */
-export function localizarHojas(doc) {
-  const textos = [];
-  for (let i = 0; i < doc.countPages(); i++) textos.push(normalizar(textoPagina(doc.loadPage(i))));
+/**
+ * Índice (base 0) de la página de cada hoja, buscándola por su título en todo el documento.
+ * `textosPaginas` son los de `recorrerTexto` (si ya se tienen, no se vuelve a leer el documento).
+ * Se compara sin espacios: así da igual cómo estén separadas las palabras en el PDF.
+ */
+export function localizarHojas(doc, textosPaginas = recorrerTexto(doc).textos) {
+  const sinEspacios = (texto) => normalizar(texto).replace(/ /g, "");
+  const textos = textosPaginas.map(sinEspacios);
   if (!textos.some(Boolean)) {
     throw new ErrorProcesado("El PDF no contiene texto (¿es un documento escaneado?), así que no se pueden localizar las hojas.");
   }
@@ -130,7 +206,7 @@ export function localizarHojas(doc) {
     // Si el título aparece en varias páginas, gana la que lo tiene más arriba (su encabezado).
     let mejor = null;
     textos.forEach((texto, i) => {
-      const posicion = texto.indexOf(hoja.busqueda);
+      const posicion = texto.indexOf(sinEspacios(hoja.busqueda));
       if (posicion >= 0 && (!mejor || posicion < mejor.posicion)) mejor = { posicion, i };
     });
     if (mejor) encontradas[hoja.clave] = mejor.i;
@@ -303,21 +379,34 @@ export function nombreParaArchivo(texto) {
   return texto.replace(/[<>:"/\\|?*\x00-\x1f]/g, "").replace(/\s+/g, " ").replace(/^[ .]+|[ .]+$/g, "");
 }
 
-export function buscarAncla(pagina, lado) {
+/**
+ * Rectángulo del "Fdo." del lado indicado (el más bajo si hay varios). Se busca en las líneas de
+ * texto ya leídas, sin distinguir mayúsculas, igual que la búsqueda de MuPDF pero sin volver a leer la página.
+ */
+export function buscarAncla(pagina, lado, lineas = lineasDeTexto(pagina)) {
   const [x0, , x1] = pagina.getBounds();
   const mitad = (x0 + x1) / 2;
-  return pagina
-    .search(config.TEXTO_ANCLA)
-    .map((quads) => rectDeQuad(quads[0]))
+  const buscado = [...config.TEXTO_ANCLA.toLowerCase()];
+  const encontrados = [];
+  for (const { chars } of lineas) {
+    for (let i = 0; i + buscado.length <= chars.length; i++) {
+      if (!buscado.every((c, k) => chars[i + k].c.toLowerCase() === c)) continue;
+      const rects = chars.slice(i, i + buscado.length).map((ch) => ch.rect);
+      encontrados.push([
+        Math.min(...rects.map((r) => r[0])), Math.min(...rects.map((r) => r[1])),
+        Math.max(...rects.map((r) => r[2])), Math.max(...rects.map((r) => r[3])),
+      ]);
+    }
+  }
+  return encontrados
     .filter((r) => (lado === "derecha" ? r[0] >= mitad : r[0] < mitad))
     .reduce((mejor, r) => (!mejor || r[1] > mejor[1] ? r : mejor), null);
 }
 
-function pegarImagen(doc, pagina, bytes, colocacion, caja, ancla) {
-  const imagen = new mupdf.Image(bytes);
-  const escala = Math.min(caja.ancho / imagen.getWidth(), caja.alto / imagen.getHeight());
-  const ancho = imagen.getWidth() * escala;
-  const alto = imagen.getHeight() * escala;
+function pegarImagen(doc, pagina, imagen, colocacion, caja, ancla) {
+  const escala = Math.min(caja.ancho / imagen.ancho, caja.alto / imagen.alto);
+  const ancho = imagen.ancho * escala;
+  const alto = imagen.alto * escala;
   const [bx0, by0, bx1, by1] = pagina.getBounds();
 
   let x = ancla ? ancla[0] + colocacion.dx : colocacion.x;
@@ -327,17 +416,16 @@ function pegarImagen(doc, pagina, bytes, colocacion, caja, ancla) {
   y = Math.min(Math.max(y, by0), by1 - alto);
 
   const objetoPagina = pagina.getObject();
-  const nombre = anadirRecurso(doc, objetoPagina, "XObject", "ImgFirmador", doc.addImage(imagen));
+  const nombre = anadirRecurso(doc, objetoPagina, "XObject", "ImgFirmador", doc.graftObject(imagen.ref));
   const matriz = mupdf.Matrix.concat([ancho, 0, 0, -alto, x, y + alto], mupdf.Matrix.invert(pagina.getTransform()));
   anadirContenido(doc, objetoPagina, `q ${matriz.map(numero).join(" ")} cm /${nombre} Do Q`);
-  imagen.destroy();
 }
 
-function nombreTrabajador(pagina, ancla) {
+function nombreTrabajador(pagina, ancla, lineas = lineasDeTexto(pagina)) {
   if (ancla) {
     const [, , x1] = pagina.getBounds();
     const zona = [ancla[0] - 2, ancla[3], x1 - 20, ancla[3] + 30];
-    for (const linea of lineasDeTexto(pagina)) {
+    for (const linea of lineas) {
       const texto = linea.chars
         .filter(({ rect }) => {
           const cx = (rect[0] + rect[2]) / 2;

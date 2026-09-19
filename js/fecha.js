@@ -28,22 +28,60 @@ export function fechaDeHoy(hoy = new Date()) {
 
 /** Para cada fuente del documento: qué glifo y anchura usa para cada carácter. */
 export function glifosDelDocumento(doc) {
+  return recorrerTexto(doc).glifos;
+}
+
+/**
+ * Una sola pasada por todo el documento que saca a la vez:
+ * - `glifos`: para cada fuente, qué glifo y anchura usa para cada carácter (para escribir la fecha);
+ * - `textos`: los caracteres de cada página en el orden en que se dibujan, sin espacios (para
+ *   encontrar las hojas por su título).
+ * Antes eran dos pasadas y era lo que más tardaba al cargar un documento.
+ */
+export function recorrerTexto(doc) {
   const glifos = {};
-  const recoger = {
-    showGlyph(font, _trm, glyph, unicode) {
-      if (unicode < 32 || glyph <= 0) return;
-      const mapa = (glifos[nombreBase(font.getName())] ??= {});
-      mapa[String.fromCodePoint(unicode)] ??= { gid: glyph, avance: font.advanceGlyph(glyph) };
+  // Se llama una vez por cada letra del documento: el nombre de la fuente se pide solo la primera
+  // vez que aparece en cada página (pedirlo siempre era lo que más tardaba).
+  let fuentesDeLaPagina = new Map();
+  let caracteres = [];
+  const leer = {
+    showGlyph(_font, _trm, _glyph, unicode) {
+      if (unicode > 32) caracteres.push(String.fromCodePoint(unicode));
     },
   };
-  const dispositivo = new mupdf.Device({ fillText: (texto) => texto.walk(recoger) });
+  const recoger = {
+    showGlyph(font, trm, glyph, unicode) {
+      leer.showGlyph(font, trm, glyph, unicode);
+      if (unicode < 32 || glyph <= 0) return;
+      let mapa = fuentesDeLaPagina.get(font.pointer);
+      if (!mapa) {
+        mapa = glifos[nombreBase(font.getName())] ??= {};
+        fuentesDeLaPagina.set(font.pointer, mapa);
+      }
+      const caracter = String.fromCodePoint(unicode);
+      if (!(caracter in mapa)) mapa[caracter] = { gid: glyph, avance: font.advanceGlyph(glyph) };
+    },
+  };
+  // Las letras solo se recogen del texto visible; el texto de la página incluye también el invisible.
+  const soloLeer = (texto) => texto.walk(leer);
+  const dispositivo = new mupdf.Device({
+    fillText: (texto) => texto.walk(recoger),
+    strokeText: soloLeer,
+    clipText: soloLeer,
+    clipStrokeText: soloLeer,
+    ignoreText: soloLeer,
+  });
+  const textos = [];
   for (let i = 0; i < doc.countPages(); i++) {
+    fuentesDeLaPagina = new Map();
+    caracteres = [];
     const pagina = doc.loadPage(i);
     pagina.run(dispositivo, mupdf.Matrix.identity);
     pagina.destroy();
+    textos.push(caracteres.join(""));
   }
   dispositivo.close();
-  return glifos;
+  return { glifos, textos };
 }
 
 /** PDF (una hoja) con la fecha de la línea "En …" sustituida por `fecha`. */

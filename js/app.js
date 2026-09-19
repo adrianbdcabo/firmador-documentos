@@ -3,11 +3,12 @@
 import { documentosDe, ESPECIALES, generar } from "./especiales.js";
 import { fechaDeHoy } from "./fecha.js";
 import * as firmas from "./firma.js";
-import { ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
+import { calentar, ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
 import { miniatura } from "./pdfutil.js";
 
 const $ = (id) => document.getElementById(id);
 const RUTA_SELLO = "recursos/sello-temps.jpeg"; // el sello viene con la web: no hay que cargarlo
+const RUTA_CALENTAR = "plantillas/real-madrid.pdf"; // PDF pequeño con el que se pone a punto el motor al abrir
 const DESFASE_PACK = 0.13; // parte de cada hoja de detrás que asoma en la vista del pack
 const ANCHO_MAX_PACK = 380;
 const RESERVA_ETIQUETAS_PACK = 80; // hueco a la derecha de la pila para "INFO · página 1"
@@ -283,7 +284,7 @@ function urlMiniatura(pdf, ancho) {
     porPdf = new Map();
     estado.urls.set(pdf, porPdf);
   }
-  if (!porPdf.has(clave)) porPdf.set(clave, URL.createObjectURL(new Blob([miniatura(pdf, ancho)], { type: "image/png" })));
+  if (!porPdf.has(clave)) porPdf.set(clave, URL.createObjectURL(new Blob([miniatura(pdf, ancho)], { type: "image/bmp" })));
   return porPdf.get(clave);
 }
 
@@ -621,6 +622,21 @@ function iniciar() {
   }
   limpiar();
   window.firmadorListo = true;
+  setTimeout(calentarMotor, 0);
+}
+
+/**
+ * La primera vez que se usa cada parte del motor de PDF va bastante más lenta. Al abrir la web se
+ * ensaya con una plantilla pequeña (y el sello) para que el primer documento se vea igual de rápido
+ * que los siguientes. Si falla, no pasa nada: solo iría algo más lento.
+ */
+async function calentarMotor() {
+  try {
+    const pdf = calentar(await plantillaDe(RUTA_CALENTAR), await cargarSello());
+    miniatura(pdf, 300);
+  } catch {
+    // sin conexión o sin la plantilla: el primer documento irá un poco más lento, sin más
+  }
 }
 
 iniciar();
