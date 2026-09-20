@@ -182,7 +182,7 @@ export async function rellenarTA2(doc, datos) {
   }
 
   // (9) Y también las cuatro casillas de la codificación informática del pie.
-  // for (const glifo of glifosDeCodificacion(lineas)) borrar.add(glifo);
+  for (const glifo of glifosDeCodificacion(lineas)) borrar.add(glifo);
 
   // (10) Borrar de verdad y escribir lo nuevo encima. `quitarGlifos` devuelve el contenido de la
   //      página sin esas letras (todo lo demás —líneas, recuadros, logos— queda intacto).
