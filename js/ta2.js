@@ -9,8 +9,8 @@
 // sube, igual que en los informes reales.
 //
 // El documento que sale NO lleva la codificación informática (referencia, fecha, hora y huella)
-// del original, porque esa codificación certifica los datos de otra persona: se deja en blanco y
-// se avisa en el pie de que es una copia de prueba sin validez.
+// del original, porque esa codificación certifica los datos de otra persona: esas casillas se
+// dejan vacías, y el propio impreso ya avisa de que sin ellas el documento no es válido.
 
 import { quitarGlifos, recorrerTexto } from "./fecha.js";
 import { interpretar, lineasDeGlifos } from "./lector.js";
@@ -26,7 +26,6 @@ const PATRON = /D\.\/Dña\.\s+(?<nombre>[^,]+?)\s*,\s*con fecha de nacimiento\s+
 // La hoja INFO del documento laboral, que es la que trae el NAF y la fecha de nacimiento.
 const PATRON_LABORAL = /trabajador\/a\s+(?<nombre>.+?)\s+con\s+N\.I\.F\.\/N\.I\.E\.\/Pasaporte:\s*(?<documento>[0-9A-Za-z]+)\s*,.{0,40}?Afilici[oó]n a la Seg\. Soc\.:\s*(?<naf>\d+)\s*y fecha de nacimiento:\s*(?<nacimiento>\d{1,2}[-/]\d{1,2}[-/]\d{4})/su;
 const CLAVES = ["nombre", "nacimiento", "naf", "tipo", "documento"];
-const AVISO = "Copia de prueba: sin la codificación informática de la Seguridad Social este documento no tiene validez.";
 
 export class TA2NoRellenado extends Error {
   constructor(mensaje) {
@@ -81,7 +80,7 @@ export function fechaBarras(texto) {
 /**
  * Cambia en el TA2 (documento ya abierto) los datos del trabajador por los de `datos`.
  */
-export async function rellenarTA2(doc, datos, { aviso = true } = {}) {
+export async function rellenarTA2(doc, datos) {
   const pagina = doc.getPage(0);
   const { glifos: mapas } = recorrerTexto(doc);
   const respaldo = {
@@ -133,7 +132,6 @@ export async function rellenarTA2(doc, datos, { aviso = true } = {}) {
   if ([...borrar].some((glifo) => !glifo.editable)) throw new TA2NoRellenado("el párrafo no se puede modificar.");
   cambiarContenido(doc, pagina, quitarGlifos(lectura, borrar));
   escribir(doc, pagina, colocadas, medida);
-  if (aviso) ponerAviso(doc, pagina, respaldo.negrita);
   return { lineasOriginales: parrafo.lineas.length, lineasNuevas, desplazamiento, valores };
 }
 
@@ -156,12 +154,6 @@ function glifosDeCodificacion(lineas) {
     for (const ch of linea.chars) if (ch.glifo) glifos.push(ch.glifo);
   }
   return glifos;
-}
-
-/** El aviso del pie: sin él, el documento podría confundirse con el original de otra persona. */
-function ponerAviso(doc, pagina, fuente) {
-  const nombre = anadirRecurso(doc, pagina, "Font", "FAviso", fuente.ref);
-  anadirContenido(doc, pagina, `q BT 0.8 0.1 0.1 rg /${nombre} 8 Tf 1 0 0 1 60 128 Tm (${AVISO.replace(/([\\()])/g, "\\$1")}) Tj ET Q`);
 }
 
 // ------------------------------------------------------------------ lectura del párrafo
