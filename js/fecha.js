@@ -158,7 +158,7 @@ const hex = (bytes) => `<${Array.from(bytes, (v) => v.toString(16).padStart(2, "
  * Contenido de la página sin los glifos de `borrar`. Cada operador de texto afectado se reescribe
  * como un TJ en el que las letras quitadas se cambian por un desplazamiento de su mismo ancho.
  */
-function quitarGlifos(lectura, borrar) {
+export function quitarGlifos(lectura, borrar) {
   const porOperador = new Map();
   for (const glifo of lectura.glifos) {
     if (!glifo.editable) continue;

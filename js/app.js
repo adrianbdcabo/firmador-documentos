@@ -4,11 +4,13 @@
 import { documentosDe, ESPECIALES, generar } from "./especiales.js";
 import { fechaDeHoy } from "./fecha.js";
 import * as firmas from "./firma.js";
-import { calentar, ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
+import { abrirCacheado, calentar, ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
 import { miniatura, miniaturas } from "./render.js";
+import { generarTA2 } from "./ta2.js";
 
 const $ = (id) => document.getElementById(id);
 const RUTA_SELLO = "recursos/sello-temps.jpeg"; // el sello viene con la web: no hay que cargarlo
+const RUTA_TA2 = "plantillas/ta2.pdf"; // informe de alta en blanco que se rellena con los datos del trabajador
 const RUTA_CALENTAR = "plantillas/real-madrid.pdf"; // PDF pequeño con el que se pone a punto el motor al abrir
 const DESFASE_PACK = 0.13; // parte de cada hoja de detrás que asoma en la vista del pack
 const ANCHO_MAX_PACK = 380;
@@ -120,6 +122,7 @@ async function procesarDocumento({ mantenerVista = false } = {}) {
   $("especiales").hidden = false;
   await mostrarPrevias();
   $("btn-descargar").disabled = false;
+  $("btn-ta2").disabled = false;
   ponerEstado(TEXTOS.listo);
   await avisarFecha();
 }
@@ -136,6 +139,7 @@ function limpiar() {
   $("interruptor-sello").hidden = true; // aparecen una vez generadas las hojas
   $("especiales").hidden = true;
   $("btn-descargar").disabled = true;
+  $("btn-ta2").disabled = true;
   actualizarDatos();
   ponerEstado("");
 }
@@ -508,6 +512,24 @@ async function descargarEspecial(especial) {
   }
 }
 
+/**
+ * El TA2 (informe de situación de alta) se rellena con el nombre, la fecha de nacimiento, el NAF y
+ * el DNI/NIE que trae la hoja INFO del documento laboral cargado.
+ */
+async function descargarTA2() {
+  const { resultado } = estado;
+  if (!resultado) return;
+  ponerEstado("Preparando el TA2…");
+  await pausa();
+  try {
+    const { pdf } = await generarTA2(await plantillaDe(RUTA_TA2), await abrirCacheado(estado.documento.datos));
+    await descargar([[`TA2 - ${resultado.trabajador}.pdf`, pdf]]);
+  } catch (error) {
+    ponerEstado("");
+    await alerta("No se ha podido preparar el TA2", `${error.message ?? error}`);
+  }
+}
+
 function crearBotonesEspeciales() {
   const contenedor = $("botones-especiales");
   for (const especial of ESPECIALES) {
@@ -594,6 +616,7 @@ function iniciar() {
   $("fecha-hoy").addEventListener("change", enOrden(cambiarFecha));
   $("con-sello").addEventListener("change", enOrden(cambiarSello));
   $("btn-descargar").addEventListener("click", enOrden(descargarTodo));
+  $("btn-ta2").addEventListener("click", enOrden(descargarTA2));
 
   for (const boton of document.querySelectorAll(".selector button")) {
     const mostrarModo = enOrden(async () => {

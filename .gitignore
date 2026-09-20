@@ -1,5 +1,8 @@
 node_modules/
 
+# Pruebas sueltas en local
+tmp-ta2/
+
 # Nunca subir documentos ni imágenes reales (datos personales, firma o sello de la empresa)
 *.pdf
 !plantillas/*.pdf
