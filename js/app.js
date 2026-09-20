@@ -5,6 +5,7 @@ import { documentosDe, ESPECIALES, generar } from "./especiales.js";
 import { fechaDeHoy } from "./fecha.js";
 import * as firmas from "./firma.js";
 import { abrirCacheado, calentar, ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
+import * as itas from "./itas.js";
 import { miniatura, miniaturas } from "./render.js";
 import { generarTA2 } from "./ta2.js";
 
@@ -40,6 +41,8 @@ const estado = {
   resultado: null,
   sello: null, // imagen del sello de la empresa, que se descarga con la web
   modo: "separados",
+  itas: [], // fichas de los ITA guardados en este navegador (sin los PDF)
+  enITA: null, // dónde aparece el trabajador de ahora: { ita, trabajador, dias }
   urls: new Map(), // miniaturas ya generadas (bytes de las hojas -> ancho -> URLs)
   imagenes: new WeakMap(), // resultado -> la firma y el sello listos para dibujarlos encima
 };
@@ -48,6 +51,13 @@ const estado = {
 
 async function cargarDocumento(archivo) {
   const datos = new Uint8Array(await archivo.arrayBuffer());
+
+  // Si lo que se carga es un ITA (el listado de trabajadores en alta), no se procesa: se guarda
+  // para poder buscar trabajadores en él. Así vale con arrastrarlo, sin botones aparte.
+  if (await itas.esITA(datos)) {
+    await anadirITA(datos, archivo.name);
+    return;
+  }
 
   // Si lo que se carga es una hoja suelta ya firmada (INFO, EPI o REN), se usa como firma.
   let hojaFirmada = null;
@@ -124,6 +134,7 @@ async function procesarDocumento({ mantenerVista = false } = {}) {
   $("btn-descargar").disabled = false;
   $("btn-ta2").disabled = false;
   ponerEstado(TEXTOS.listo);
+  buscarEnITAs(resultado.dni).catch(() => {}); // no debe estorbar si falla el almacén
   await avisarFecha();
 }
 
@@ -140,6 +151,8 @@ function limpiar() {
   $("especiales").hidden = true;
   $("btn-descargar").disabled = true;
   $("btn-ta2").disabled = true;
+  estado.enITA = null;
+  $("fila-ita").hidden = true;
   actualizarDatos();
   ponerEstado("");
 }
@@ -530,6 +543,148 @@ async function descargarTA2() {
   }
 }
 
+// ITA: el listado de trabajadores en alta
+
+/**
+ * Guarda un ITA en el navegador: lo lee (fecha, cuenta de cotización y todos sus trabajadores) y lo
+ * mete en el almacén. Si ya había uno de esa misma cuenta y fecha, lo sustituye.
+ */
+async function anadirITA(datos, nombre) {
+  ponerEstado(`Leyendo ${nombre}…`);
+  await pausa();
+  try {
+    const ficha = await itas.leerITA(datos, nombre);
+    await itas.guardarITA(ficha, datos);
+    await refrescarITAs();
+    ponerEstado(`✓ ITA del ${itas.fechaBonita(ficha.fecha)} guardado: ${ficha.trabajadores.length} trabajadores en alta.`, true);
+    // Si ya había un documento laboral cargado, se vuelve a mirar con el ITA nuevo.
+    if (estado.resultado) await buscarEnITAs(estado.resultado.dni);
+  } catch (error) {
+    ponerEstado("");
+    await alerta("No se ha podido guardar el ITA", `${error.message ?? error}`);
+  }
+}
+
+/**
+ * Relee la lista de ITA guardados y pone al día el botón de la cabecera. De paso borra los que ya
+ * pasan de diez días: con más de siete no valen para mandarlos a una empresa usuaria.
+ */
+async function refrescarITAs() {
+  try {
+    await itas.limpiarAntiguos();
+    estado.itas = await itas.listarITAs();
+  } catch {
+    estado.itas = []; // navegador sin almacén disponible (p. ej. modo privado)
+  }
+  $("btn-itas").textContent = estado.itas.length ? `ITA guardados (${estado.itas.length})` : "ITA guardados";
+}
+
+/**
+ * Mira si el trabajador cargado aparece en alguno de los ITA guardados y lo cuenta en la línea de
+ * debajo de sus datos, con el botón para descargarlo.
+ */
+async function buscarEnITAs(dni) {
+  const fila = $("fila-ita");
+  const texto = $("texto-ita");
+  const boton = $("btn-ita");
+  estado.enITA = null;
+  if (!estado.itas.length) {
+    // Sin ITA guardados no se dice nada: la línea solo estorbaría.
+    fila.hidden = true;
+    return;
+  }
+  const encontrados = await itas.buscarTrabajador(dni, estado.itas);
+  fila.hidden = false;
+  if (!encontrados.length) {
+    texto.textContent = `No aparece en ${estado.itas.length === 1 ? "el ITA guardado" : `ninguno de los ${estado.itas.length} ITA guardados`}`;
+    texto.className = "pequeno suave";
+    boton.hidden = true;
+    return;
+  }
+  // Si el trabajador está en varios ITA se ofrece siempre el más reciente: `buscarTrabajador`
+  // los devuelve ordenados por fecha, del más nuevo al más viejo, así que vale con el primero.
+  const [mejor] = encontrados;
+  estado.enITA = mejor;
+  const cuando = mejor.dias === 0 ? "de hoy" : mejor.dias === 1 ? "de ayer" : `de hace ${mejor.dias} días`;
+  const viejo = mejor.dias > itas.DIAS_VALIDO;
+  // "· también en otro" si hay dos, "· también en otros 3" si hay más
+  const sobran = encontrados.length - 1;
+  const otros = sobran > 0 ? ` · también en ${sobran === 1 ? "otro" : `otros ${sobran}`}` : "";
+  texto.textContent = `${viejo ? "⚠" : "✓"} En alta en el ITA del ${itas.fechaBonita(mejor.ita.fecha)} (${cuando}${viejo ? ", más de 7 días" : ""}), página ${mejor.trabajador.pagina}${otros}`;
+  texto.className = viejo ? "pequeno aviso" : "pequeno ok";
+  boton.hidden = false;
+}
+
+/** Descarga el ITA donde está el trabajador, avisando antes si ya tiene más de 7 días. */
+async function descargarITA() {
+  const encontrado = estado.enITA;
+  if (!encontrado) return;
+  if (encontrado.dias > itas.DIAS_VALIDO) {
+    const seguir = await confirmar(
+      "El ITA tiene más de 7 días",
+      `El ITA en el que aparece ${estado.resultado?.trabajador ?? "el trabajador"} es del ${itas.fechaBonita(encontrado.ita.fecha)}, de hace ${encontrado.dias} días.
+
+Las empresas usuarias no suelen aceptarlo con más de 7 días: descarga un ITA del día en el Sistema RED y añádelo aquí.
+
+¿Lo descargas igualmente?`,
+      "Descargar igualmente");
+    if (!seguir) return;
+  }
+  try {
+    const pdf = await itas.pdfDeITA(encontrado.ita.id);
+    const nombre = estado.resultado?.trabajador ?? encontrado.trabajador.nombre;
+    await descargar([[`ITA ${itas.fechaBonita(encontrado.ita.fecha).replace(/\//g, "-")} - ${nombre}.pdf`, pdf]]);
+  } catch (error) {
+    await alerta("No se ha podido descargar el ITA", `${error.message ?? error}`);
+  }
+}
+
+/** Abre la ventana con los ITA guardados. */
+async function abrirITAs() {
+  await refrescarITAs();
+  pintarListaITAs();
+  $("dialogo-itas").showModal();
+}
+
+/** Dibuja la lista de ITA guardados, cada uno con su botón de quitar. */
+function pintarListaITAs() {
+  const lista = $("lista-itas");
+  lista.replaceChildren();
+  if (!estado.itas.length) {
+    const vacio = document.createElement("p");
+    vacio.className = "pequeno suave";
+    vacio.textContent = "Todavía no hay ningún ITA guardado.";
+    lista.append(vacio);
+    return;
+  }
+  for (const ficha of estado.itas) {
+    const dias = itas.diasDesde(ficha.fecha);
+    const viejo = dias > itas.DIAS_VALIDO;
+
+    const linea = document.createElement("div");
+    linea.className = "linea-ita";
+
+    const datos = document.createElement("span");
+    datos.className = "pequeno";
+    datos.textContent = `${viejo ? "⚠" : "✓"} ${itas.fechaBonita(ficha.fecha)} · ${ficha.trabajadores.length} trabajadores · ${ficha.paginas} páginas${viejo ? ` · ${dias} días` : ""}`;
+    if (viejo) datos.classList.add("aviso");
+
+    const quitar = document.createElement("button");
+    quitar.type = "button";
+    quitar.className = "enlace pequeno";
+    quitar.textContent = "Quitar";
+    quitar.addEventListener("click", enOrden(async () => {
+      await itas.borrarITA(ficha.id);
+      await refrescarITAs();
+      pintarListaITAs();
+      if (estado.resultado) await buscarEnITAs(estado.resultado.dni);
+    }));
+
+    linea.append(datos, quitar);
+    lista.append(linea);
+  }
+}
+
 function crearBotonesEspeciales() {
   const contenedor = $("botones-especiales");
   for (const especial of ESPECIALES) {
@@ -617,6 +772,16 @@ function iniciar() {
   $("con-sello").addEventListener("change", enOrden(cambiarSello));
   $("btn-descargar").addEventListener("click", enOrden(descargarTodo));
   $("btn-ta2").addEventListener("click", enOrden(descargarTA2));
+  $("btn-ita").addEventListener("click", enOrden(descargarITA));
+  $("btn-itas").addEventListener("click", enOrden(abrirITAs));
+  $("anadir-ita").addEventListener("click", () => $("input-ita").click());
+  $("cerrar-itas").addEventListener("click", () => $("dialogo-itas").close());
+  $("input-ita").addEventListener("change", enOrden(async () => {
+    const archivos = [...$("input-ita").files];
+    $("input-ita").value = ""; // permite volver a elegir el mismo archivo
+    for (const archivo of archivos) await anadirITA(new Uint8Array(await archivo.arrayBuffer()), archivo.name);
+    if ($("dialogo-itas").open) pintarListaITAs();
+  }));
 
   for (const boton of document.querySelectorAll(".selector button")) {
     const mostrarModo = enOrden(async () => {
@@ -670,6 +835,7 @@ function iniciar() {
   new ResizeObserver(() => ajustarEspeciales()).observe($("tarjetas"));
 
   crearBotonesEspeciales();
+  refrescarITAs(); // los ITA guardados de otras veces
   for (const id of ["btn-documento", "btn-firma"]) $(id).disabled = false;
   cargarSello().catch(() => {}); // se va descargando; si falla, se avisa al activar el interruptor
   try {

@@ -6,6 +6,7 @@
   --texto: #1d1d1b;
   --texto-suave: #77776f;
   --acento: #e4572e;
+  --bien: #2f7a3f; /* el verde de "correcto": el trabajador está en un ITA al día */
   --acento-hover: #cc4a24;
   --hover-suave: #f0f0ec;
   --apagado: #d3d3cd;
@@ -88,6 +89,13 @@ button { font: inherit; color: inherit; }
 .fila-firma { display: flex; align-items: center; gap: 8px; margin-top: 4px; min-height: 28px; flex-wrap: wrap; }
 .fila-firma img { height: 26px; background: #fff; border: 1px solid var(--borde); }
 .fila-firma .texto-cargada { color: var(--texto); }
+
+/* Lo que se sabe del ITA del trabajador cargado, y la lista de ITA guardados */
+.fila-ita { display: flex; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+.pequeno.ok { color: var(--bien); }
+.pequeno.aviso { color: var(--acento); }
+.lista-itas { display: flex; flex-direction: column; gap: 6px; margin: 0 0 18px; max-height: 40vh; overflow-y: auto; }
+.linea-ita { display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid var(--borde); padding: 8px 10px; }
 
 .interruptores { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .interruptor { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; margin-top: 4px; }
@@ -193,6 +201,8 @@ dialog {
 dialog::backdrop { background: rgb(29 29 27 / 35%); }
 dialog h3 { margin: 0 0 10px; font-size: 16px; }
 dialog p { margin: 0 0 18px; white-space: pre-line; line-height: 1.45; }
+#dialogo-itas { max-width: 560px; }
+#dialogo-itas p { margin-bottom: 12px; }
 .dialogo-botones { display: flex; justify-content: flex-end; gap: 10px; }
 
 button, label { -webkit-tap-highlight-color: transparent; }

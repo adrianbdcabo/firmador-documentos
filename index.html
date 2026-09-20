@@ -21,8 +21,10 @@
       <div class="acciones">
         <button type="button" id="btn-firma" class="boton secundario" disabled>Cargar firma</button>
         <button type="button" id="btn-documento" class="boton secundario" disabled>Cargar documentos laborales</button>
+        <button type="button" id="btn-itas" class="boton secundario" title="Ver y añadir los ITA guardados en este navegador">ITA guardados</button>
       </div>
       <input type="file" id="input-documento" accept="application/pdf,.pdf" hidden>
+      <input type="file" id="input-ita" accept="application/pdf,.pdf" multiple hidden>
       <input type="file" id="input-firma" accept="application/pdf,.pdf,image/png,image/jpeg,image/bmp,.png,.jpg,.jpeg,.bmp" hidden>
     </header>
 
@@ -36,6 +38,10 @@
           <img id="img-firma" alt="Firma cargada" hidden>
           <span id="texto-firma" class="pequeno suave"></span>
           <button type="button" id="quitar-firma" class="enlace pequeno" hidden>Quitar</button>
+        </div>
+        <div class="fila-ita" id="fila-ita" hidden>
+          <span id="texto-ita" class="pequeno"></span>
+          <button type="button" id="btn-ita" class="enlace pequeno" hidden>Descargar ITA</button>
         </div>
       </div>
       <div class="interruptores">
@@ -89,6 +95,20 @@
       Los documentos se procesan en este navegador: no se envían a ningún servidor.
     </p>
   </main>
+
+  <dialog id="dialogo-itas">
+    <h3>ITA guardados</h3>
+    <p class="pequeno suave">
+      Se guardan en este navegador y siguen aquí la próxima vez que abras la web: no se suben a ningún sitio.
+      También puedes añadir uno arrastrándolo a la ventana, como los documentos laborales.
+      Los de más de 10 días se borran solos.
+    </p>
+    <div id="lista-itas" class="lista-itas"></div>
+    <div class="dialogo-botones">
+      <button type="button" id="anadir-ita" class="boton secundario">Añadir ITA…</button>
+      <button type="button" id="cerrar-itas" class="boton principal">Cerrar</button>
+    </div>
+  </dialog>
 
   <dialog id="dialogo">
     <h3 id="dialogo-titulo"></h3>
