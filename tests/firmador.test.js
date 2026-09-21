@@ -299,6 +299,25 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     }
   });
 
+  test("PHARMAMAR: la cabecera de la primera hoja con el nombre, el DNI, la empresa y la firma", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, puesto: resultado.puesto, firma: resultado.firma, sello: SELLO, fecha: new Date(2026, 8, 21) };
+    const especial = ESPECIALES.find((e) => e.id === "pharmamar");
+    assert.equal(especial.archivo(datos), `DOCU ESPECIAL PHARMAMAR - ${resultado.trabajador}.pdf`);
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
+    // La plantilla no puede traer datos de ningún trabajador anterior
+    const original = await texto(plantilla, 0);
+    for (const rastro of ["GARCIA BRICEÑO", "Z2952275T"]) assert.ok(!original.includes(rastro), `la plantilla está limpia de "${rastro}"`);
+    const pdf = await generar(especial, plantilla, datos);
+    assert.equal(await paginas(pdf), 17, "se entregan las 17 hojas");
+    const textos = (await texto(pdf, 0)).split("\n").map((l) => l.trim());
+    for (const esperado of [resultado.trabajador, resultado.dni, "TEMPS ETT MULTIWORK S.L."]) {
+      assert.ok(textos.includes(esperado), `falta "${esperado}"`);
+    }
+    assert.ok(await llevaImagen(pdf, datos.firma, 0), "lleva la firma del trabajador");
+    assert.equal(await llevaImagen(pdf, SELLO, 0), false, "este documento no lleva sello");
+  });
+
   test("en los documentos especiales un nombre o puesto larguísimo no se sale de su hueco", async () => {
     const largo = "MARIA DEL CARMEN FERNANDEZ DE LA HOZ ECHEVARRIA GUTIERREZ";
     const puesto = "AYUDANTE DE COCINA Y MANTENIMIENTO DE INSTALACIONES DEPORTIVAS";

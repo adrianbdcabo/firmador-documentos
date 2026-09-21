@@ -165,6 +165,24 @@ export const ESPECIALES = [
       },
     ],
   },
+  {
+    // Información de riesgos de PharmaMar: 17 hojas apaisadas de las que solo se rellena la primera,
+    // que es la cabecera con los datos del trabajador ("Nombre y Apellidos", "DNI", "Nombre Empresa"
+    // y el recuadro de "Fecha y Firma del trabajador", donde va la captura de la firma digital).
+    id: "pharmamar",
+    boton: "PHARMAMAR",
+    plantilla: "plantillas/pharmamar.pdf",
+    archivo: (datos) => `DOCU ESPECIAL PHARMAMAR - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      // El hueco del nombre llega hasta donde empieza "Fecha y Firma del trabajador:" (x=479,5)
+      { valor: (d) => d.trabajador, x: 120.4, y: 90.1, tamano: 9, ancho: 340 },
+      { valor: (d) => d.dni, x: 58.3, y: 109.2, tamano: 9, ancho: 120 },
+      // La empresa es siempre la nuestra, así que va fija
+      { valor: () => "TEMPS ETT MULTIWORK S.L.", x: 111.3, y: 128, tamano: 9, ancho: 200 },
+      { imagen: (d) => d.firma, x: 601.5, y: 83.5, ancho: 124, alto: 54 },
+    ],
+  },
 ];
 
 /** Los documentos que descarga el botón de una plataforma (casi siempre, uno). */
