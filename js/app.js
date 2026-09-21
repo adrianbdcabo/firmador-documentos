@@ -527,7 +527,8 @@ async function descargarEspecial(especial) {
 
 /**
  * El TA2 (informe de situación de alta) se rellena con el nombre, la fecha de nacimiento, el NAF y
- * el DNI/NIE que trae la hoja INFO del documento laboral cargado.
+ * el DNI/NIE que trae la hoja INFO del documento laboral cargado. La fecha de efectos del alta es
+ * siempre la de hoy (no depende del interruptor "Poner fecha de hoy", que es para las hojas).
  */
 async function descargarTA2() {
   const { resultado } = estado;

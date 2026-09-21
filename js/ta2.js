@@ -1,6 +1,8 @@
 // © 2026 Adrián Barroso de Cabo.
 // Rellenar un TA2 (informe de situación de alta de la Seguridad Social) con los datos del
-// trabajador del documento laboral cargado: nombre, fecha de nacimiento, NAF y DNI/NIE.
+// trabajador del documento laboral cargado: nombre, fecha de nacimiento, NAF y DNI/NIE. La fecha
+// de efectos del alta se pone la del día en que se genera, en los dos sitios donde sale: en el
+// párrafo del alta ("con fecha 21/09/2026") y en el renglón de arriba ("21 de septiembre de 2026").
 //
 // CÓMO FUNCIONA, DE PRINCIPIO A FIN
 //  1. `datosDelLaboral` lee el documento laboral y saca de la hoja INFO los cuatro datos.
@@ -31,7 +33,7 @@
 // un certificado falso, así que esas cuatro casillas se vacían; el propio impreso ya avisa debajo
 // de que sin la codificación el documento no es válido.
 
-import { quitarGlifos, recorrerTexto } from "./fecha.js";
+import { MESES, quitarGlifos, recorrerTexto } from "./fecha.js";
 import { interpretar, lineasDeGlifos } from "./lector.js";
 import {
   PDFDict, PDFName, PDFRef, PDFStream,
@@ -40,15 +42,18 @@ import {
 } from "./pdfbase.js";
 import { StandardFonts } from "../vendor/pdf-lib/pdf-lib.esm.min.js";
 
-// El párrafo del TA2, con los cuatro datos entre paréntesis para poder sustituirlos por separado:
-// "… de D./Dña. NOMBRE, con fecha de nacimiento 07/02/2006, con número de afiliación 28 1501917624 y DNI 072008038Y,"
-const PATRON = /D\.\/Dña\.\s+(?<nombre>[^,]+?)\s*,\s*con fecha de nacimiento\s+(?<nacimiento>\d{1,2}\/\d{1,2}\/\d{4})\s*,\s*con número de afiliación\s+(?<naf>\d{2}\s?\d{10})\s*y\s*(?<tipo>DNI|NIE)\s+(?<documento>[0-9A-Za-z]{8,12})\s*,/u;
+// El párrafo del TA2, con los datos entre paréntesis para poder sustituirlos por separado:
+// "… de D./Dña. NOMBRE, con fecha de nacimiento 07/02/2006, con número de afiliación 28 1501917624
+//  y DNI 072008038Y, con fecha 19/09/2026, como trabajador de …"
+const PATRON = /D\.\/Dña\.\s+(?<nombre>[^,]+?)\s*,\s*con fecha de nacimiento\s+(?<nacimiento>\d{1,2}\/\d{1,2}\/\d{4})\s*,\s*con número de afiliación\s+(?<naf>\d{2}\s?\d{10})\s*y\s*(?<tipo>DNI|NIE)\s+(?<documento>[0-9A-Za-z]{8,12})\s*,\s*con fecha\s+(?<alta>\d{1,2}\/\d{1,2}\/\d{4})\s*,/u;
 // La frase de la hoja INFO del documento laboral, que es la única que trae el NAF y el nacimiento:
 // "El/La trabajador/a OSAFAMEN, CINTHIA con N.I.F./N.I.E./Pasaporte: Y6912244E, Nº Afilición a la
 //  Seg. Soc.:281548815306 y fecha de nacimiento:16-02-1994"  ("Afilición" está así en el original).
 const PATRON_LABORAL = /trabajador\/a\s+(?<nombre>.+?)\s+con\s+N\.I\.F\.\/N\.I\.E\.\/Pasaporte:\s*(?<documento>[0-9A-Za-z]+)\s*,.{0,40}?Afilici[oó]n a la Seg\. Soc\.:\s*(?<naf>\d+)\s*y fecha de nacimiento:\s*(?<nacimiento>\d{1,2}[-/]\d{1,2}[-/]\d{4})/su;
-// Los cuatro datos, en el mismo orden en que aparecen en el párrafo (importa para sustituirlos).
-const CLAVES = ["nombre", "nacimiento", "naf", "tipo", "documento"];
+// Los datos, en el mismo orden en que aparecen en el párrafo (importa para sustituirlos).
+const CLAVES = ["nombre", "nacimiento", "naf", "tipo", "documento", "alta"];
+// La fecha escrita con letra del renglón "…es la que se indica a continuación: 19 de septiembre de 2026".
+const FECHA_EFECTOS = /\d{1,2} de \p{L}+ de \d{4}/u;
 
 /** Error con mensaje en español: lo recoge app.js y lo enseña en un aviso. */
 export class TA2NoRellenado extends Error {
@@ -60,11 +65,12 @@ export class TA2NoRellenado extends Error {
 
 /**
  * Lo que llama el botón "TA2 del trabajador": coge la plantilla y el documento laboral ya abierto,
- * y devuelve los bytes del PDF listo para descargar.
+ * y devuelve los bytes del PDF listo para descargar. `fecha` es la fecha de efectos del alta que
+ * se escribe en el informe; si no se dice otra cosa, la de hoy.
  */
-export async function generarTA2(plantilla, docLaboral) {
+export async function generarTA2(plantilla, docLaboral, fecha = new Date()) {
   const doc = await abrirPdf(plantilla);
-  const resultado = await rellenarTA2(doc, datosDelLaboral(docLaboral));
+  const resultado = await rellenarTA2(doc, datosDelLaboral(docLaboral), fecha);
   return { pdf: await guardar(doc), ...resultado };
 }
 
@@ -107,6 +113,20 @@ export function nafFormateado(naf) {
   return `${limpio.slice(0, 2)} ${limpio.slice(2)}`;
 }
 
+/** La fecha del alta con barras, como la escribe el TA2 en el párrafo: "21/09/2026". */
+export function fechaConBarras(fecha) {
+  const dos = (n) => String(n).padStart(2, "0");
+  return `${dos(fecha.getDate())}/${dos(fecha.getMonth() + 1)}/${fecha.getFullYear()}`;
+}
+
+/**
+ * La misma fecha escrita con letra, como sale en el renglón de arriba: "21 de septiembre de 2026".
+ * El mes va en minúscula y el día sin cero delante, que es como lo pone el informe original.
+ */
+export function fechaConLetra(fecha) {
+  return `${fecha.getDate()} de ${MESES[fecha.getMonth()].toLowerCase()} de ${fecha.getFullYear()}`;
+}
+
 /** La fecha con barras y dos cifras, como en el TA2: "16-02-1994" -> "16/02/1994". */
 export function fechaBarras(texto) {
   const partes = /(\d{1,2})[-/](\d{1,2})[-/](\d{4})/.exec(texto);
@@ -118,7 +138,7 @@ export function fechaBarras(texto) {
  * El trabajo de verdad: cambia en el TA2 ya abierto los datos del trabajador por los de `datos`.
  * Los pasos van numerados para poder seguirlos.
  */
-export async function rellenarTA2(doc, datos) {
+export async function rellenarTA2(doc, datos, fecha = new Date()) {
   const pagina = doc.getPage(0); // el informe es siempre de una sola página
 
   // (1) Qué letras trae cada fuente del PDF: para cada una, su número de glifo y su anchura.
@@ -150,6 +170,7 @@ export async function rellenarTA2(doc, datos) {
     naf: nafFormateado(datos.naf),
     tipo: documento.tipo,
     documento: documento.valor,
+    alta: fechaConBarras(fecha), // la fecha de efectos del alta: la de hoy
   };
 
   // (5) Cambiar cada dato en la lista de letras. Cada letra nueva copia la fuente, el tamaño y el
@@ -170,16 +191,15 @@ export async function rellenarTA2(doc, datos) {
   // (7) Apuntar las letras viejas que hay que borrar: primero las del párrafo.
   const borrar = new Set(chars.map((ch) => ch.glifo).filter(Boolean));
 
-  // (8) Si el párrafo pasa a ocupar más (o menos) líneas, el párrafo siguiente ("La fecha de
-  //     efectos…") baja o sube lo mismo, para que quede la línea en blanco de siempre entre los
-  //     dos. Se borra de su sitio y se vuelve a dibujar más abajo o más arriba, sin tocar su texto.
+  // (8) El renglón de debajo ("La fecha de efectos… 19 de septiembre de 2026") repite la misma
+  //     fecha del alta con letra, así que también hay que ponerlo al día. Y, de paso, si el
+  //     párrafo ha pasado a ocupar más (o menos) líneas, este renglón baja o sube lo mismo para
+  //     que siga quedando la línea en blanco de siempre entre los dos.
   const desplazamiento = (lineasNuevas - parrafo.lineas.length) * parrafo.interlineado;
-  if (desplazamiento !== 0) {
-    const siguiente = lineas.find((l) => textoDe(l).trimStart().startsWith("La fecha de efectos"));
-    if (!siguiente) throw new TA2NoRellenado("no se encuentra el párrafo de la fecha de efectos.");
-    for (const ch of siguiente.chars) if (ch.glifo) borrar.add(ch.glifo);
-    colocadas.push(palabrasColocadas(siguiente, desplazamiento, medida));
-  }
+  const siguiente = lineas.find((l) => textoDe(l).trimStart().startsWith("La fecha de efectos"));
+  if (!siguiente) throw new TA2NoRellenado("no se encuentra el párrafo de la fecha de efectos.");
+  for (const ch of siguiente.chars) if (ch.glifo) borrar.add(ch.glifo);
+  colocadas.push(palabrasColocadas(siguiente, desplazamiento, medida, fechaConLetra(fecha)));
 
   // (9) Y también las cuatro casillas de la codificación informática del pie.
   for (const glifo of glifosDeCodificacion(lineas)) borrar.add(glifo);
@@ -194,14 +214,44 @@ export async function rellenarTA2(doc, datos) {
 }
 
 /**
- * Las palabras de una línea que no cambia de texto, en su misma posición pero `desplazamiento`
- * puntos más abajo (o más arriba, si el número es negativo).
+ * Vuelve a colocar las palabras de un renglón `desplazamiento` puntos más abajo (o más arriba, si
+ * el número es negativo) y, si se le pasa `fechaNueva`, le cambia la fecha escrita con letra.
+ *
+ * Las palabras que van ANTES de la fecha se quedan clavadas en su sitio de siempre: se les copia
+ * la posición que tenían en el original. A partir de la fecha ya no vale, porque la nueva puede
+ * ocupar más o menos ("19 de septiembre" frente a "1 de mayo"), así que esas se van colocando una
+ * detrás de otra midiéndolas, empezando justo donde empezaba la fecha vieja.
  */
-function palabrasColocadas(linea, desplazamiento, medida) {
-  const chars = linea.chars.map((ch) => ({ ...ch, negrita: nombreBase(ch.fuente).includes("Bold") }));
+function palabrasColocadas(linea, desplazamiento, medida, fechaNueva) {
+  let chars = linea.chars.map((ch) => ({ ...ch, negrita: nombreBase(ch.fuente).includes("Bold") }));
+  const y = chars.find((ch) => ch.glifo).glifo.origen[1] + desplazamiento;
+  const cambio = fechaNueva ? FECHA_EFECTOS.exec(chars.map((ch) => ch.c).join("")) : null;
+
+  // Dónde empieza la fecha vieja: ahí mismo empezará la nueva.
+  let desdeX = null;
+  if (cambio) {
+    const modelo = chars[cambio.index]; // la fecha va en negrita: se copia su fuente y su tamaño
+    desdeX = modelo.glifo.origen[0];
+    chars = [
+      ...chars.slice(0, cambio.index),
+      ...[...fechaNueva].map((c) => ({ ...modelo, c, glifo: null })),
+      ...chars.slice(cambio.index + cambio[0].length),
+    // "recolocar" marca las letras de la fecha y todo lo que vaya detrás (aquí, el punto final).
+    ].map((ch, i) => (i >= cambio.index ? { ...ch, recolocar: true } : ch));
+  }
+
+  const espacio = anchoChar({ ...chars[0], c: " ", negrita: false }, medida) || 0.278 * chars[0].tamano;
+  let x = 0;
+  let primeraMovida = true;
   return enPalabras(chars, medida).map((palabra) => {
-    const primero = palabra.chars.find((ch) => ch.glifo);
-    return { ...palabra, x: primero.glifo.origen[0], y: primero.glifo.origen[1] + desplazamiento };
+    if (!palabra.chars.some((ch) => ch.recolocar)) x = palabra.chars.find((ch) => ch.glifo).glifo.origen[0];
+    else if (primeraMovida) {
+      x = desdeX;
+      primeraMovida = false;
+    }
+    const colocada = { ...palabra, x, y };
+    x += palabra.ancho + espacio; // por si la siguiente palabra hay que recolocarla
+    return colocada;
   });
 }
 

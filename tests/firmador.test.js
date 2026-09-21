@@ -16,6 +16,7 @@ import { interpretar, lineasDeGlifos, textoDeLineas } from "../js/lector.js";
 import { ErrorProcesado, FirmaNoEncontrada, campoFirma, firmante, procesar } from "../js/pdf.js";
 import { PDFDocument, PDFName, abrirPdf, comoNumero, guardar, obtener } from "../js/pdfbase.js";
 import { renderizar } from "../js/render.js";
+import { generarTA2 } from "../js/ta2.js";
 
 const EJEMPLOS = process.env.FIRMADOR_EJEMPLOS ?? path.join(os.homedir(), "DOCUMENTOS DE EJEMPLO");
 const existe = (nombre) => fs.existsSync(path.join(EJEMPLOS, nombre));
@@ -340,6 +341,28 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
         for (const l of suyas) assert.ok(l.bbox[2] <= derecha + 0.5, `${especial.boton}: acaba en ${l.bbox[2].toFixed(1)}, el hueco en ${derecha.toFixed(1)}`);
       }
     }
+  });
+
+  test("TA2: los datos del trabajador y la fecha de efectos del día", async () => {
+    const plantilla = new Uint8Array(fs.readFileSync(new URL("../plantillas/ta2.pdf", import.meta.url)));
+    const laboral = await abrirPdf(leer(DOCS["51143385X"].archivo));
+    const { pdf, valores } = await generarTA2(plantilla, laboral, new Date(2027, 10, 15));
+    assert.equal(valores.nombre, DOCS["51143385X"].nombre);
+    assert.equal(valores.alta, "15/11/2027");
+    const seguido = (await texto(pdf, 0)).replace(/\s+/g, " ");
+    for (const esperado of [
+      "D./Dña. IGNACIO CARLOS PUCHOL VIÑA, con fecha de nacimiento 10/03/1992,",
+      "y DNI 051143385X, con fecha 15/11/2027, como trabajador de",
+      "se indica a continuación: 15 de noviembre de 2027.",
+    ]) {
+      assert.ok(seguido.includes(esperado), `falta "${esperado}"`);
+    }
+    // Ni la fecha ni los datos de la plantilla pueden quedar en ningún sitio
+    for (const viejo of ["19/09/2026", "19 de septiembre de 2026", "NOMBRE APELLIDOS", "000000000A"]) {
+      assert.ok(!seguido.includes(viejo), `queda "${viejo}" de la plantilla`);
+    }
+    // Las casillas de la codificación informática se entregan en blanco
+    assert.ok(/REFERENCIA: FECHA: HORA: HUELLA:/.test(seguido), "la codificación va vacía");
   });
 
   test("formato de la fecha de hoy", () => {
