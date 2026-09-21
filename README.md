@@ -6,8 +6,9 @@ Página web que coge el documento laboral (global), saca las 3 hojas que hay que
 (INFO, EPI y REN), pega en cada una la firma del trabajador debajo de su nombre y el sello
 de la empresa, y las descarga en PDF.
 
-**Todo se procesa en el navegador.** Los documentos no se envían a ningún servidor ni se
-guardan en ningún sitio.
+**Los documentos laborales se procesan en el navegador**: no se envían a ningún servidor ni se
+guardan en ningún sitio. La única excepción son los ITA, que en la web de Cloudflare se guardan
+diez días en una carpeta compartida por toda la oficina (ver *Los ITA* más abajo).
 
 ## Cómo se usa
 
@@ -33,6 +34,33 @@ guardan en ningún sitio.
 5. En **DOCUS ESPECIALES PLATAFORMAS**, a la derecha, cada botón descarga el documento
    que pide esa plataforma ya relleno con el nombre, el DNI, la fecha de hoy y la firma
    del trabajador.
+6. **TA2 del trabajador** descarga el informe de situación de alta relleno con su nombre,
+   fecha de nacimiento, NAF y DNI/NIE, y con la fecha de efectos del día. Las casillas de la
+   codificación informática se entregan en blanco: sin ellas el documento no es válido.
+7. Debajo del nombre se ven el **DNI/NIE y el NAF** del trabajador (el NAF con los dos dígitos
+   de la provincia separados, "28 1548815306"), para tenerlos a mano al entrar en la Seguridad
+   Social.
+
+## Los ITA
+
+Un ITA es el informe de trabajadores en alta de una cuenta de cotización. Al cargar un
+documento laboral, la web mira si ese DNI/NIE aparece en los ITA guardados y ofrece descargar
+el más reciente, avisando si tiene más de 7 días (las empresas usuarias no suelen aceptarlo).
+
+Se guardan en uno de dos sitios, y la web elige solo:
+
+- **La carpeta compartida** (en la web de Cloudflare): los ITA que sube cualquiera los ven
+  todos, así que basta con que uno suba el del día. Viven en una base de datos D1 creada en
+  Europa occidental y se borran a los 10 días, solos, de madrugada.
+- **El almacén del navegador** (en cualquier otro sitio, como la copia de GitHub): los ITA no
+  salen del ordenador y cada uno tiene los suyos. Es el respaldo si no hay servidor.
+
+Si se sube otro ITA de la misma cuenta y el mismo día, se queda **el que se sacó más tarde**
+del Sistema RED: a lo largo de la jornada se dan altas nuevas. La hora la trae el propio
+informe en el pie ("CODIFICACIONES INFORMÁTICAS … FECHA: 18-09-2026 HORA: 09:55:17").
+
+Quitar un ITA de la carpeta compartida solo pueden los correos de `CORREOS_ADMIN`
+(en `wrangler.jsonc`); los demás solo suben y consultan.
 
 ### Añadir un documento especial
 
@@ -55,6 +83,18 @@ directamente), por ejemplo:
 npx http-server -p 8080
 ```
 
+Así se prueba sin servidor: los ITA van al almacén del navegador. Para probar también la
+carpeta compartida hace falta levantar el Worker con su base de datos:
+
+```sh
+node scripts/preparar-dist.mjs
+npm run esquema:local          # crea las tablas en la base de datos de prueba
+npx wrangler dev --port 8787   # la web en http://127.0.0.1:8787 con /api/ funcionando
+```
+
+En local no hay Cloudflare Access, así que no se sabe quién entra y no se puede borrar; para
+hacer como si fueras tú, manda la cabecera `Cf-Access-Authenticated-User-Email`.
+
 Pruebas automáticas (necesitan los documentos de ejemplo, que no están en el repositorio
 porque contienen datos personales; por defecto se buscan en `~/DOCUMENTOS DE EJEMPLO`):
 
@@ -74,6 +114,15 @@ Qué hace cada archivo de `js/`:
 - `render.js`: dibujar páginas con pdf.js.
 - `imagenes.js`: leer y escribir PNG y JPG, recortar y componer.
 - `especiales.js`: los documentos de plataformas.
+- `itas.js`: leer un ITA, guardarlo (en la carpeta compartida o en el navegador) y buscar en ellos.
+- `ta2.js`: rellenar el TA2 con los datos del trabajador y la fecha del día.
+
+Y fuera de `js/`:
+
+- `worker/index.js`: el servidor de la carpeta compartida de ITA en Cloudflare (solo `/api/...`).
+- `worker/esquema.sql`: las tablas de esa base de datos; se crean con `npm run esquema`.
+- `wrangler.jsonc`: la configuración de Cloudflare (base de datos, correos que pueden borrar y
+  la limpieza automática de cada madrugada).
 
 Para actualizar las librerías: `npm install pdf-lib@latest pdfjs-dist@latest fast-png@latest jpeg-js@latest`
 y copiar a `vendor/` `pdf-lib.esm.min.js`, los archivos de `pdfjs-dist/legacy/build/` (más

@@ -16,7 +16,8 @@ import { interpretar, lineasDeGlifos, textoDeLineas } from "../js/lector.js";
 import { ErrorProcesado, FirmaNoEncontrada, campoFirma, firmante, procesar } from "../js/pdf.js";
 import { PDFDocument, PDFName, abrirPdf, comoNumero, guardar, obtener } from "../js/pdfbase.js";
 import { renderizar } from "../js/render.js";
-import { generarTA2 } from "../js/ta2.js";
+import { esMasNuevo, horaBonita, leerITA } from "../js/itas.js";
+import { generarTA2, nafFormateado } from "../js/ta2.js";
 
 const EJEMPLOS = process.env.FIRMADOR_EJEMPLOS ?? path.join(os.homedir(), "DOCUMENTOS DE EJEMPLO");
 const existe = (nombre) => fs.existsSync(path.join(EJEMPLOS, nombre));
@@ -31,6 +32,7 @@ const DOCS = {
 const hayEjemplos = Object.values(DOCS).every((d) => existe(d.archivo)) && existe("FOTO SELLO TEMPS.jpeg");
 const SELLO = hayEjemplos ? leer("FOTO SELLO TEMPS.jpeg") : null;
 const CAPTURA = "FOTO FIRMA DE EJEMPLO.jpeg";
+const ITA = "ita_1809_260920_215821.pdf";
 
 // Esquina superior izquierda de las imágenes pegadas a mano en INFO/EPI/REN HECHA.
 const ESPERADO = {
@@ -363,6 +365,40 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     }
     // Las casillas de la codificación informática se entregan en blanco
     assert.ok(/REFERENCIA: FECHA: HORA: HUELLA:/.test(seguido), "la codificación va vacía");
+  });
+
+  test("ITA: se lee la fecha, la cuenta y la hora a la que se sacó del Sistema RED", { skip: !existe(ITA) }, async () => {
+    const ficha = await leerITA(leer(ITA), ITA);
+    assert.equal(ficha.fecha, "2026-09-18");
+    assert.equal(ficha.cuenta, "0111 37 107366063");
+    assert.equal(ficha.id, "0111 37 107366063|2026-09-18");
+    assert.equal(ficha.paginas, 34);
+    assert.equal(ficha.cuantos, 837);
+    // La hora sale de la codificación informática del pie, que es lo que distingue dos del mismo día
+    assert.equal(ficha.emision, "2026-09-18T09:55:17");
+    assert.equal(ficha.referencia, "A1172609000001");
+    assert.equal(horaBonita(ficha.emision), "09:55");
+    // El trabajador del DOCUMENTO GLOBAL tiene que estar, con su DNI a diez caracteres
+    const cinthia = ficha.trabajadores.find((t) => t.documento === "0Y6912244E");
+    assert.ok(cinthia, "CINTHIA sale en el ITA");
+    assert.equal(cinthia.pagina, 15);
+    assert.equal(cinthia.naf, "28 1548815306");
+  });
+
+  test("ITA: de dos del mismo día se queda el que se sacó más tarde", () => {
+    const manana = { emision: "2026-09-18T09:55:17" };
+    const tarde = { emision: "2026-09-18T13:40:02" };
+    assert.equal(esMasNuevo(tarde, manana), true);
+    assert.equal(esMasNuevo(manana, tarde), false);
+    assert.equal(esMasNuevo(manana, manana), false, "el mismo no sustituye al mismo");
+    // Si a alguno le falta la hora del informe, se compara con la hora en que se subió
+    assert.equal(esMasNuevo({ guardado: "2026-09-18T20:00:00Z" }, { subido: "2026-09-18T08:00:00Z" }), true);
+  });
+
+  test("el NAF se escribe con los dos dígitos de la provincia separados", () => {
+    assert.equal(nafFormateado("281548815306"), "28 1548815306");
+    assert.equal(nafFormateado("28 1548815306"), "28 1548815306");
+    assert.equal(nafFormateado("1548815306"), "00 1548815306", "se rellena con ceros si viene corto");
   });
 
   test("formato de la fecha de hoy", () => {

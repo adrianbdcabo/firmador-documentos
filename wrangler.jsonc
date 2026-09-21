@@ -6,5 +6,29 @@
   "assets": { "directory": "./dist" },
   "workers_dev": true,
   // Sin direcciones de vista previa por versión: no pasarían por el control de acceso
-  "preview_urls": false
+  "preview_urls": false,
+
+  // El servidor de la carpeta compartida de ITA. Solo atiende las direcciones /api/...; el resto
+  // (index.html, js/, plantillas/…) lo sirve Cloudflare directamente desde dist/ sin pasar por aquí.
+  "main": "worker/index.js",
+
+  // La base de datos donde viven los ITA compartidos, creada en Europa occidental (WEUR).
+  // Las tablas se crean con `npm run esquema`.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "firmador-itas",
+      "database_id": "9f9ee05f-3263-4eaf-81af-cddb1a585d15"
+    }
+  ],
+
+  // Quién puede quitar un ITA de la carpeta compartida. Los demás solo suben y consultan.
+  "vars": {
+    "CORREOS_ADMIN": "adrianbdcabo@gmail.com"
+  },
+
+  // Limpieza automática cada madrugada (3:00 en hora universal): borra los ITA de más de 10 días.
+  "triggers": {
+    "crons": ["0 3 * * *"]
+  }
 }

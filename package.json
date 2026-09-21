@@ -4,7 +4,9 @@
   "description": "Firmador de documentos laborales (web estatica)",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "deploy": "node scripts/preparar-dist.mjs && wrangler deploy"
+    "deploy": "node scripts/preparar-dist.mjs && wrangler deploy",
+    "esquema": "wrangler d1 execute firmador-itas --remote --file worker/esquema.sql",
+    "esquema:local": "wrangler d1 execute firmador-itas --local --file worker/esquema.sql"
   },
   "keywords": [],
   "author": "Adrián Barroso de Cabo",

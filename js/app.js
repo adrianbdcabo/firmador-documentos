@@ -7,7 +7,7 @@ import * as firmas from "./firma.js";
 import { abrirCacheado, calentar, ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
 import * as itas from "./itas.js";
 import { miniatura, miniaturas } from "./render.js";
-import { generarTA2 } from "./ta2.js";
+import { datosDelLaboral, documentoFormateado, generarTA2, nafFormateado } from "./ta2.js";
 
 const $ = (id) => document.getElementById(id);
 const RUTA_SELLO = "recursos/sello-temps.jpeg"; // el sello viene con la web: no hay que cargarlo
@@ -41,7 +41,8 @@ const estado = {
   resultado: null,
   sello: null, // imagen del sello de la empresa, que se descarga con la web
   modo: "separados",
-  itas: [], // fichas de los ITA guardados en este navegador (sin los PDF)
+  itas: [], // fichas de los ITA guardados (sin los PDF)
+  almacenITA: { compartido: false, puedeBorrar: true, donde: "este navegador" }, // dónde se guardan
   enITA: null, // dónde aparece el trabajador de ahora: { ita, trabajador, dias }
   urls: new Map(), // miniaturas ya generadas (bytes de las hojas -> ancho -> URLs)
   imagenes: new WeakMap(), // resultado -> la firma y el sello listos para dibujarlos encima
@@ -128,6 +129,7 @@ async function procesarDocumento({ mantenerVista = false } = {}) {
   if (estado.firma) estado.firma.usada = true;
 
   estado.resultado = resultado;
+  mostrarIdentificacion().catch(() => {}); // el DNI y el NAF; si no salen, no estorban
   $("interruptor-sello").hidden = false;
   $("especiales").hidden = false;
   await mostrarPrevias();
@@ -152,6 +154,7 @@ function limpiar() {
   $("btn-descargar").disabled = true;
   $("btn-ta2").disabled = true;
   estado.enITA = null;
+  $("identificacion").textContent = "";
   $("fila-ita").hidden = true;
   actualizarDatos();
   ponerEstado("");
@@ -544,20 +547,62 @@ async function descargarTA2() {
   }
 }
 
+/**
+ * Enseña debajo del nombre el DNI/NIE y el NAF del trabajador. Sirve para tenerlos a mano cuando
+ * hay que entrar luego en la Seguridad Social a sacar papeles suyos, sin abrir otra vez el PDF.
+ *
+ * El DNI viene ya del documento procesado, pero el NAF solo aparece en la frase de la hoja INFO
+ * ("Nº Afilición a la Seg. Soc.:281548815306"), así que hay que volver a leerlo de ahí; es lo
+ * mismo que hace el botón del TA2. Se escribe con los dos primeros dígitos (los de la provincia)
+ * separados del resto, "28 1548815306", que es como lo piden los trámites de la Seguridad Social.
+ */
+async function mostrarIdentificacion() {
+  const fila = $("identificacion");
+  const suyo = estado.resultado;
+  fila.textContent = "";
+  if (!suyo) return;
+
+  const partes = [];
+  if (suyo.dni) partes.push(`${documentoFormateado(suyo.dni).tipo} ${suyo.dni}`);
+  try {
+    const { naf } = datosDelLaboral(await abrirCacheado(estado.documento.datos));
+    if (naf) partes.push(`NAF ${nafFormateado(naf)}`);
+  } catch {
+    // Hay documentos que no traen la frase con el NAF: entonces se enseña solo el DNI.
+  }
+  // Mientras se leía el NAF puede haberse cargado otro documento: entonces esto ya no vale.
+  if (estado.resultado === suyo) fila.textContent = partes.join(" · ");
+}
+
 // ITA: el listado de trabajadores en alta
 
 /**
- * Guarda un ITA en el navegador: lo lee (fecha, cuenta de cotización y todos sus trabajadores) y lo
- * mete en el almacén. Si ya había uno de esa misma cuenta y fecha, lo sustituye.
+ * Guarda un ITA: lo lee (fecha, cuenta de cotización, hora de extracción y todos sus trabajadores)
+ * y lo mete en el almacén, que casi siempre será la carpeta compartida.
+ *
+ * Si ya había uno de esa misma cuenta y día se queda el que se sacó MÁS TARDE del Sistema RED: a
+ * lo largo de la jornada se dan altas nuevas, así que el de las 13:40 trae gente que el de las
+ * 09:55 todavía no tenía. Cuando el que llega es el viejo, no se guarda y se avisa.
  */
 async function anadirITA(datos, nombre) {
   ponerEstado(`Leyendo ${nombre}…`);
   await pausa();
   try {
     const ficha = await itas.leerITA(datos, nombre);
-    await itas.guardarITA(ficha, datos);
+    const guardado = await itas.guardarITA(ficha, datos);
     await refrescarITAs();
-    ponerEstado(`✓ ITA del ${itas.fechaBonita(ficha.fecha)} guardado: ${ficha.trabajadores.length} trabajadores en alta.`, true);
+    const hora = itas.horaBonita(ficha.emision);
+    if (!guardado.guardado) {
+      const suya = itas.horaBonita(guardado.anterior?.emision);
+      ponerEstado("");
+      await alerta("Ya hay un ITA de ese día más reciente",
+        `El ITA del ${itas.fechaBonita(ficha.fecha)} que ya está guardado se sacó${suya ? ` a las ${suya}` : " después"}${hora ? `, y este es de las ${hora}` : ""}.
+
+Se queda el más reciente, porque trae las altas del resto del día.`);
+      return;
+    }
+    const donde = estado.almacenITA.compartido ? " (lo ven todos los compañeros)" : "";
+    ponerEstado(`✓ ITA del ${itas.fechaBonita(ficha.fecha)}${hora ? ` de las ${hora}` : ""} guardado: ${ficha.cuantos} trabajadores en alta${donde}.`, true);
     // Si ya había un documento laboral cargado, se vuelve a mirar con el ITA nuevo.
     if (estado.resultado) await buscarEnITAs(estado.resultado.dni);
   } catch (error) {
@@ -568,16 +613,36 @@ async function anadirITA(datos, nombre) {
 
 /**
  * Relee la lista de ITA guardados y pone al día el botón de la cabecera. De paso borra los que ya
- * pasan de diez días: con más de siete no valen para mandarlos a una empresa usuaria.
+ * pasan de diez días (en la carpeta compartida de eso se encarga el servidor cada madrugada): con
+ * más de siete no valen para mandarlos a una empresa usuaria.
  */
 async function refrescarITAs() {
   try {
+    estado.almacenITA = await itas.dondeSeGuardan();
     await itas.limpiarAntiguos();
     estado.itas = await itas.listarITAs();
   } catch {
-    estado.itas = []; // navegador sin almacén disponible (p. ej. modo privado)
+    estado.itas = []; // sin almacén disponible (servidor caído, o navegador en modo privado)
   }
   $("btn-itas").textContent = estado.itas.length ? `ITA guardados (${estado.itas.length})` : "ITA guardados";
+  $("btn-itas").title = estado.almacenITA.compartido
+    ? "Ver y añadir los ITA de la carpeta compartida: los sube uno y los tenéis todos"
+    : "Ver y añadir los ITA guardados en este navegador";
+  contarDondeSeGuardan();
+}
+
+/**
+ * Cuenta en la pantalla dónde acaban los ITA, que no es un detalle menor: en la carpeta compartida
+ * el PDF se sube a un servidor y lo ve toda la oficina, y en el navegador no sale del ordenador.
+ */
+function contarDondeSeGuardan() {
+  const compartido = estado.almacenITA.compartido;
+  $("texto-almacen-ita").textContent = compartido
+    ? "Se guardan en la carpeta compartida de la empresa: los sube uno y los tenéis todos, entréis por donde entréis. Los de más de 10 días se borran solos."
+    : "Se guardan en este navegador y siguen aquí la próxima vez que abras la web: no se suben a ningún sitio. Los de más de 10 días se borran solos.";
+  $("nota-privacidad").textContent = compartido
+    ? "Los documentos laborales se procesan en este navegador y no se envían a ningún servidor. Los ITA sí: se guardan en la carpeta compartida de la empresa durante 10 días."
+    : "Los documentos se procesan en este navegador: no se envían a ningún servidor.";
 }
 
 /**
@@ -647,41 +712,51 @@ async function abrirITAs() {
   $("dialogo-itas").showModal();
 }
 
-/** Dibuja la lista de ITA guardados, cada uno con su botón de quitar. */
+/**
+ * Dibuja la lista de ITA guardados. De cada uno se dice la fecha del informe y a qué hora se sacó
+ * del Sistema RED, que es lo que distingue dos del mismo día. El botón de quitar solo sale si este
+ * almacén deja borrar: en la carpeta compartida, solo los correos autorizados.
+ */
 function pintarListaITAs() {
   const lista = $("lista-itas");
   lista.replaceChildren();
   if (!estado.itas.length) {
     const vacio = document.createElement("p");
     vacio.className = "pequeno suave";
-    vacio.textContent = "Todavía no hay ningún ITA guardado.";
+    vacio.textContent = estado.almacenITA.compartido
+      ? "Todavía no hay ningún ITA en la carpeta compartida."
+      : "Todavía no hay ningún ITA guardado.";
     lista.append(vacio);
     return;
   }
   for (const ficha of estado.itas) {
     const dias = itas.diasDesde(ficha.fecha);
     const viejo = dias > itas.DIAS_VALIDO;
+    const hora = itas.horaBonita(ficha.emision);
 
     const linea = document.createElement("div");
     linea.className = "linea-ita";
 
     const datos = document.createElement("span");
     datos.className = "pequeno";
-    datos.textContent = `${viejo ? "⚠" : "✓"} ${itas.fechaBonita(ficha.fecha)} · ${ficha.trabajadores.length} trabajadores · ${ficha.paginas} páginas${viejo ? ` · ${dias} días` : ""}`;
+    datos.textContent = `${viejo ? "⚠" : "✓"} ${itas.fechaBonita(ficha.fecha)}${hora ? ` · sacado a las ${hora}` : ""} · ${ficha.cuantos} trabajadores · ${ficha.paginas} páginas${viejo ? ` · ${dias} días` : ""}`;
     if (viejo) datos.classList.add("aviso");
+    linea.append(datos);
 
-    const quitar = document.createElement("button");
-    quitar.type = "button";
-    quitar.className = "enlace pequeno";
-    quitar.textContent = "Quitar";
-    quitar.addEventListener("click", enOrden(async () => {
-      await itas.borrarITA(ficha.id);
-      await refrescarITAs();
-      pintarListaITAs();
-      if (estado.resultado) await buscarEnITAs(estado.resultado.dni);
-    }));
+    if (estado.almacenITA.puedeBorrar) {
+      const quitar = document.createElement("button");
+      quitar.type = "button";
+      quitar.className = "enlace pequeno";
+      quitar.textContent = "Quitar";
+      quitar.addEventListener("click", enOrden(async () => {
+        await itas.borrarITA(ficha.id);
+        await refrescarITAs();
+        pintarListaITAs();
+        if (estado.resultado) await buscarEnITAs(estado.resultado.dni);
+      }));
+      linea.append(quitar);
+    }
 
-    linea.append(datos, quitar);
     lista.append(linea);
   }
 }

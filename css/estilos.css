@@ -115,6 +115,10 @@ button { font: inherit; color: inherit; }
 /* Zona central */
 .area { flex: 1; min-height: 420px; margin: 16px 0; position: relative; display: flex; gap: 20px; }
 
+/* DNI/NIE y NAF del trabajador, debajo de su nombre: se pueden seleccionar para copiarlos */
+.identificacion { margin: 2px 0 0; color: var(--texto); letter-spacing: 0.02em; user-select: text; }
+.identificacion:empty { display: none; }
+
 /* Panel de documentos especiales, a la derecha de las vistas previas */
 /* No crece con los botones: app.js lo limita a la altura de las vistas previas y, si hay más, se hace scroll */
 .especiales { width: 210px; flex: none; display: flex; flex-direction: column; contain: size; }

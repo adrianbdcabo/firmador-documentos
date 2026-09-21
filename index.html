@@ -21,7 +21,7 @@
       <div class="acciones">
         <button type="button" id="btn-firma" class="boton secundario" disabled>Cargar firma</button>
         <button type="button" id="btn-documento" class="boton secundario" disabled>Cargar documentos laborales</button>
-        <button type="button" id="btn-itas" class="boton secundario" title="Ver y añadir los ITA guardados en este navegador">ITA guardados</button>
+        <button type="button" id="btn-itas" class="boton secundario" title="Ver y añadir los ITA guardados">ITA guardados</button>
       </div>
       <input type="file" id="input-documento" accept="application/pdf,.pdf" hidden>
       <input type="file" id="input-ita" accept="application/pdf,.pdf" multiple hidden>
@@ -33,6 +33,8 @@
     <section class="barra">
       <div class="datos">
         <h2 id="trabajador"></h2>
+        <!-- DNI/NIE y NAF del trabajador, para tenerlos a mano al entrar en la Seguridad Social -->
+        <p id="identificacion" class="identificacion pequeno"></p>
         <p id="fecha" class="suave pequeno"></p>
         <div class="fila-firma">
           <img id="img-firma" alt="Firma cargada" hidden>
@@ -92,16 +94,16 @@
     <p id="estado" class="estado pequeno suave" role="status"></p>
     <p class="creditos pequeno suave">
       Creado por Adrián Barroso de Cabo · © 2026. Todos los derechos reservados.
-      Los documentos se procesan en este navegador: no se envían a ningún servidor.
+      <span id="nota-privacidad">Los documentos se procesan en este navegador: no se envían a ningún servidor.</span>
     </p>
   </main>
 
   <dialog id="dialogo-itas">
     <h3>ITA guardados</h3>
     <p class="pequeno suave">
-      Se guardan en este navegador y siguen aquí la próxima vez que abras la web: no se suben a ningún sitio.
+      <span id="texto-almacen-ita">Se guardan en este navegador y siguen aquí la próxima vez que abras la web: no se suben a ningún sitio. Los de más de 10 días se borran solos.</span>
       También puedes añadir uno arrastrándolo a la ventana, como los documentos laborales.
-      Los de más de 10 días se borran solos.
+      Si subes otro del mismo día, se queda el que se sacó más tarde del Sistema RED.
     </p>
     <div id="lista-itas" class="lista-itas"></div>
     <div class="dialogo-botones">
