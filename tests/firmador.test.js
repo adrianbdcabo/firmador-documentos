@@ -374,11 +374,16 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       ["merck-tres-cantos", 0, `DOCU ESPECIAL MERCK TRES CANTOS - ${resultado.trabajador}.pdf`, 4,
         [resultado.trabajador, "TEMPS MULTIWORK ETT", "22/09/2026"]],
       ["montesa-honda", 0, `DOCU ESPECIAL MONTESA HONDA - ${resultado.trabajador}.pdf`, 3,
-        [resultado.trabajador, "22/09/2026"]],
+        ["PUCHOL VIÑA, IGNACIO CARLOS", "TEMPS MULTIWORK SL ETT", "EUREST SERVICIOS", "22/09/2026"]],
       ["plastipak", 0, `DOCU ESPECIAL PLASTIPAK - ${resultado.trabajador}.pdf`, 1,
         [resultado.trabajador, "TEMPS MULTIWORK ETT", "22/09/2026"]],
       ["telefonica", 0, `DOCU ESPECIAL TELEFONICA - ${resultado.trabajador}.pdf`, 1,
         [resultado.trabajador, resultado.dni, resultado.puesto, "TEMPS MULTIWORK ETT", "SOLEDAD FERNANDEZ", "B01130186", "MADRID"]],
+      // El CIF sale una sola vez (arriba, en su hueco); el DNI del trabajador, dos (tabla y pie)
+    ];
+    const cuentas = [
+      ["telefonica", 0, "B01130186", 1],
+      ["telefonica", 0, resultado.dni, 2],
     ];
     for (const [id, cual, archivo, numeroPaginas, esperados] of casos) {
       const documento = documentosDe(ESPECIALES.find((e) => e.id === id))[cual];
@@ -390,6 +395,15 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       const contenido = (await texto(pdf, indice)).replace(/\s+/g, " ");
       for (const esperado of esperados) assert.ok(contenido.includes(esperado), `${archivo}: falta "${esperado}"`);
       assert.ok(await llevaImagen(pdf, datos.firma, indice), `${archivo}: lleva la firma`);
+    }
+
+    // Cada dato tiene que salir las veces justas: el CIF de la empresa solo arriba, en su hueco,
+    // y el DNI del trabajador en la tabla y en el bloque de abajo.
+    for (const [id, cual, buscado, veces] of cuentas) {
+      const documento = documentosDe(ESPECIALES.find((e) => e.id === id))[cual];
+      const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${documento.plantilla}`, import.meta.url)));
+      const contenido = (await texto(await generar(documento, plantilla, datos), 0)).replace(/\s+/g, " ");
+      assert.equal(contenido.split(buscado).length - 1, veces, `"${buscado}" tiene que salir ${veces} vez/veces`);
     }
   });
 

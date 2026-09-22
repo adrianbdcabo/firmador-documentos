@@ -39,6 +39,9 @@ const fechaCorta = (fecha) => `${dosCifras(fecha.getDate())}/${dosCifras(fecha.g
 const EMPRESA = "TEMPS MULTIWORK ETT";
 const CIF = "B01130186";
 const REPRESENTANTE = "SOLEDAD FERNANDEZ";
+// La empresa usuaria a la que va el trabajador. De momento es fija; si algún día hace falta que
+// cambie de un documento a otro, se puede leer de la hoja INFO del documento laboral.
+const EMPRESA_USUARIA = "EUREST SERVICIOS";
 const LUGAR = "MADRID";
 
 export const ESPECIALES = [
@@ -283,12 +286,15 @@ export const ESPECIALES = [
     archivo: (datos) => `DOCU ESPECIAL MONTESA HONDA - ${datos.trabajador}.pdf`,
     pagina: -1,
     campos: [
-      // Tabla (72,6 | 203,2 | 339 | 452,3 | 545,4; la fila va de 496,9 a 565,3). La primera
-      // columna es de MONTESA, así que se deja en blanco.
-      { imagen: (d) => d.sello, x: 207, y: 500, ancho: 128, alto: 62, centrado: true },
-      { valor: (d) => d.trabajador, x: 395.7, y: 511, tamano: 8, ancho: 108, centrado: true },
-      { imagen: (d) => d.firma, x: 343, y: 516, ancho: 105, alto: 44, centrado: true },
-      { valor: (d) => fechaCorta(d.fecha), x: 498.9, y: 534.6, tamano: 10, ancho: 86, centrado: true },
+      // Tabla (72,6 | 203,2 | 339 | 452,3 | 545,4; la fila va de 496,9 a 565,3), rellenada como en
+      // el documento de ejemplo: nosotros como empresa principal, la empresa usuaria como
+      // contratada, y en la columna del trabajador su nombre con la firma justo debajo.
+      { valor: () => "TEMPS MULTIWORK SL ETT", x: 137.9, y: 518.5, tamano: 9, ancho: 124, centrado: true },
+      { valor: () => EMPRESA_USUARIA, x: 271.1, y: 520.5, tamano: 10, ancho: 128, centrado: true },
+      // El nombre va con los apellidos delante, y cabe en dos renglones porque la casilla es estrecha
+      { valor: (d) => `${d.apellidos}, ${d.nombre}`, x: 345, y: 508, tamano: 8, ancho: 105, lineas: 2, interlineado: 9.5 },
+      { imagen: (d) => d.firma, x: 341, y: 521, ancho: 110, alto: 43, centrado: true },
+      { valor: (d) => fechaCorta(d.fecha), x: 498.9, y: 521.5, tamano: 11, ancho: 86, centrado: true },
     ],
   },
   {
@@ -327,7 +333,8 @@ export const ESPECIALES = [
       // El bloque de abajo, tal y como se venía rellenando a mano
       { valor: (d) => d.puesto, x: 116, y: 605, tamano: 11, ancho: 300 },
       { valor: (d) => d.trabajador, x: 172, y: 623, tamano: 11, ancho: 300 },
-      { valor: () => CIF, x: 105, y: 640.9, tamano: 11, ancho: 300 },
+      // Aquí va el DNI del trabajador: el C.I.F. de la empresa ya está arriba, en su sitio
+      { valor: (d) => d.dni, x: 105, y: 640.9, tamano: 11, ancho: 300 },
       // "En……………… a …… de ………… de 20…."
       { valor: () => LUGAR, x: 359.4, y: 710, tamano: 11, ancho: 76, centrado: true },
       { valor: (d) => dosCifras(d.fecha.getDate()), x: 418.8, y: 710, tamano: 11, ancho: 17, centrado: true },
