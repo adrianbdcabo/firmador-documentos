@@ -1,7 +1,7 @@
 // © 2026 Adrián Barroso de Cabo.
 // Interfaz: cargar el documento laboral (y, si hace falta, la firma y el sello), previsualizar y descargar.
 
-import { documentosDe, ESPECIALES, generar } from "./especiales.js";
+import { documentosDe, generar, ordenados } from "./especiales.js";
 import { fechaDeHoy } from "./fecha.js";
 import * as firmas from "./firma.js";
 import { abrirCacheado, calentar, ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
@@ -503,6 +503,25 @@ async function plantillaDe(ruta) {
   return plantillas.get(ruta);
 }
 
+/**
+ * Los apellidos y el nombre de pila por separado. Algunos impresos (el acuse de TALGO, por
+ * ejemplo) tienen una columna para cada cosa, y el nombre que se enseña en pantalla va todo
+ * junto. La hoja INFO del documento laboral los trae ya separados por una coma
+ * ("OSAFAMEN, CINTHIA"); si ahí no se pueden leer, se parte el nombre completo por el primer
+ * hueco, que es lo que más veces acierta.
+ */
+async function partesDelNombre() {
+  try {
+    const { nombreCrudo } = datosDelLaboral(await abrirCacheado(estado.documento.datos));
+    const [apellidos, pila] = (nombreCrudo ?? "").split(",");
+    if (pila?.trim()) return { apellidos: apellidos.trim(), nombre: pila.replace(/\s+/g, " ").trim() };
+  } catch {
+    // Documento sin esa frase: se reparte el nombre completo como se pueda.
+  }
+  const partes = (estado.resultado?.trabajador ?? "").trim().split(/\s+/);
+  return { nombre: partes[0] ?? "", apellidos: partes.slice(1).join(" ") };
+}
+
 async function descargarEspecial(especial) {
   const { resultado } = estado;
   if (!resultado) return;
@@ -514,6 +533,7 @@ async function descargarEspecial(especial) {
     puesto: resultado.puesto,
     firma: resultado.firma,
     fecha: new Date(),
+    ...(await partesDelNombre()), // apellidos y nombre por separado, para los impresos que los piden así
   };
   try {
     datos.sello = await cargarSello();
@@ -763,7 +783,7 @@ function pintarListaITAs() {
 
 function crearBotonesEspeciales() {
   const contenedor = $("botones-especiales");
-  for (const especial of ESPECIALES) {
+  for (const especial of ordenados()) {
     const boton = document.createElement("button");
     boton.type = "button";
     boton.className = "boton secundario";

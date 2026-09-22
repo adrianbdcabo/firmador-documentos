@@ -85,7 +85,9 @@ export function datosDelLaboral(doc) {
     const lineas = lineasDeGlifos(interpretar(doc, pagina).glifos);
     const texto = lineas.map((l) => l.chars.map((ch) => ch.c).join("")).join(" ").replace(/\s+/g, " ");
     const encontrado = PATRON_LABORAL.exec(texto);
-    if (encontrado) return { ...encontrado.groups, nombre: nombreDirecto(encontrado.groups.nombre) };
+    // `nombre` sale ya en orden normal ("CINTHIA OSAFAMEN") y `nombreCrudo` tal cual lo escribe el
+    // documento laboral ("OSAFAMEN, CINTHIA"), que es de donde se sacan los apellidos por separado.
+    if (encontrado) return { ...encontrado.groups, nombreCrudo: encontrado.groups.nombre, nombre: nombreDirecto(encontrado.groups.nombre) };
   }
   throw new TA2NoRellenado("el documento laboral no trae el NAF y la fecha de nacimiento del trabajador.");
 }

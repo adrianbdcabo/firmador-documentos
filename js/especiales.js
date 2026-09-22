@@ -9,6 +9,22 @@
 // Cada texto puede llevar "fuente" (una de las 14 estándar de PDF; por defecto Helvetica) y
 // "centrado": true, y entonces la "x" es el centro del texto en vez de su inicio. Con "lineas": N
 // el texto se parte por palabras en hasta N líneas si no cabe en una ("interlineado", distancia entre ellas).
+// En una imagen, "centrado": true la coloca en el medio del hueco (x, y, ancho, alto) en vez de
+// pegada a su esquina de arriba a la izquierda: es lo que hace que una firma quede dentro de la
+// casilla de una tabla sin taparle las rayas.
+//
+// LOS DATOS QUE HAY PARA RELLENAR
+//   d.trabajador  nombre completo, en orden normal ("CINTHIA OSAFAMEN")
+//   d.apellidos   solo los apellidos, y d.nombre solo el nombre de pila: algunos impresos los
+//                 piden en columnas separadas
+//   d.dni         DNI o NIE del trabajador
+//   d.puesto      su categoría o puesto, que cambia de un trabajador a otro
+//   d.fecha       la fecha de hoy
+//   d.firma       la captura de su firma digital, y d.sello el sello de la empresa
+//
+// TODO SE ESCRIBE EN NEGRO Y CON LA MISMA LETRA
+// Aunque el impreso rellenado a mano tuviera la fecha en rojo o cada dato de un tamaño, aquí se
+// escribe todo del mismo tamaño y en negro: queda más limpio y más uniforme.
 
 import { fechaDeHoy, MESES } from "./fecha.js";
 import { StandardFonts } from "../vendor/pdf-lib/pdf-lib.esm.min.js";
@@ -18,6 +34,12 @@ const TAMANO_MINIMO = 6; // si el texto no cabe, se encoge hasta aquí
 
 const dosCifras = (n) => String(n).padStart(2, "0");
 const fechaCorta = (fecha) => `${dosCifras(fecha.getDate())}/${dosCifras(fecha.getMonth() + 1)}/${fecha.getFullYear()}`;
+
+// Datos nuestros que se repiten en varios impresos.
+const EMPRESA = "TEMPS MULTIWORK ETT";
+const CIF = "B01130186";
+const REPRESENTANTE = "SOLEDAD FERNANDEZ";
+const LUGAR = "MADRID";
 
 export const ESPECIALES = [
   {
@@ -183,7 +205,151 @@ export const ESPECIALES = [
       { imagen: (d) => d.firma, x: 601.5, y: 83.5, ancho: 124, alto: 54 },
     ],
   },
+  {
+    // Dos documentos de TALGO: el registro de medio ambiente y el acuse de recibo de información.
+    id: "talgo",
+    boton: "TALGO",
+    documentos: [
+      {
+        plantilla: "plantillas/talgo-medio-ambiente.pdf",
+        archivo: (datos) => `REGISTRO DE MEDIO AMBIENTE TALGO - ${datos.trabajador}.pdf`,
+        pagina: 0, // son 4 hojas y solo se rellena la primera
+        campos: [
+          { valor: () => EMPRESA, x: 196, y: 128.5, tamano: 11, ancho: 330 },
+          { valor: () => "TALGO LAS MATAS II", x: 359, y: 153.9, tamano: 11, ancho: 174 },
+          { valor: (d) => d.puesto, x: 247, y: 179.3, tamano: 11, ancho: 283 },
+          // La X de "¿VA A GENERAR RESIDUOS?  [ ] NO": la casilla va de 229,4 a 243,1
+          { valor: () => "X", x: 236.2, y: 228.2, tamano: 11, ancho: 12, centrado: true },
+          // Primera fila de la tabla (81,2 | 332,9 | 410,6 | 516,4; la fila va de 440,9 a 470,6)
+          { valor: (d) => d.trabajador, x: 207, y: 459.6, tamano: 11, ancho: 240, centrado: true },
+          { valor: (d) => fechaCorta(d.fecha), x: 371.8, y: 459.6, tamano: 11, ancho: 70, centrado: true },
+          { imagen: (d) => d.firma, x: 414, y: 443, ancho: 98, alto: 25, centrado: true },
+          // "……………, a ……. de ……………… de 20…"
+          { valor: () => LUGAR, x: 250, y: 733.9, tamano: 11, ancho: 104, centrado: true },
+          { valor: (d) => dosCifras(d.fecha.getDate()), x: 348.6, y: 733.9, tamano: 11, ancho: 44, centrado: true },
+          { valor: (d) => MESES[d.fecha.getMonth()].toUpperCase(), x: 433, y: 733.9, tamano: 11, ancho: 88, centrado: true },
+          { valor: (d) => String(d.fecha.getFullYear()).slice(-2), x: 516.8, y: 733.9, tamano: 11, ancho: 13, centrado: true },
+          { imagen: (d) => d.sello, x: 365, y: 752, ancho: 80, alto: 58 }, // "Firma y sello de la contrata"
+        ],
+      },
+      {
+        plantilla: "plantillas/talgo-acuse.pdf",
+        archivo: (datos) => `ACUSE RECIBO TALGO - ${datos.trabajador}.pdf`,
+        pagina: 0,
+        campos: [
+          // "D. ________ como ________ de la EMPRESA / ________ que va a efectuar trabajos para…"
+          { valor: (d) => d.trabajador, x: 176, y: 164.1, tamano: 11, ancho: 212, centrado: true },
+          { valor: (d) => d.puesto, x: 392, y: 164.1, tamano: 11, ancho: 150, centrado: true },
+          { valor: () => EMPRESA, x: 133, y: 178.6, tamano: 11, ancho: 150, centrado: true },
+          // La X de la casilla "62 - LAS MATAS II", que va de 303,6 a 315,1
+          { valor: () => "X", x: 309.4, y: 341, tamano: 11, ancho: 12, centrado: true },
+          { valor: () => EMPRESA, x: 420.8, y: 494.5, tamano: 11, ancho: 232, centrado: true },
+          // Primera fila de la tabla (56,8 | 276,4 | 396,8 | 474,8; la fila va de 550,4 a 568)
+          { valor: (d) => d.apellidos, x: 166.6, y: 562.5, tamano: 10, ancho: 212, centrado: true },
+          { valor: (d) => d.nombre, x: 336.6, y: 562.5, tamano: 10, ancho: 114, centrado: true },
+          { valor: (d) => fechaCorta(d.fecha), x: 435.8, y: 562.5, tamano: 10, ancho: 72, centrado: true },
+          // La casilla de la firma es muy bajita: la firma se centra dentro para no pisar las rayas
+          { imagen: (d) => d.firma, x: 476, y: 551.5, ancho: 61, alto: 15.5, centrado: true },
+          // "……………….. a ……de ……………….de 20.…"
+          { valor: () => LUGAR, x: 112.6, y: 716.1, tamano: 11, ancho: 108, centrado: true },
+          { valor: (d) => dosCifras(d.fecha.getDate()), x: 194, y: 716.1, tamano: 11, ancho: 28, centrado: true },
+          { valor: (d) => MESES[d.fecha.getMonth()].toUpperCase(), x: 269, y: 716.1, tamano: 11, ancho: 88, centrado: true },
+          { valor: (d) => String(d.fecha.getFullYear()).slice(-2), x: 345.5, y: 716.1, tamano: 11, ancho: 13, centrado: true },
+          { imagen: (d) => d.sello, x: 190, y: 740, ancho: 80, alto: 58 }, // "Firma y sello de la contrata"
+        ],
+      },
+    ],
+  },
+  {
+    // Registro de entrega de información: son 4 hojas y solo se rellena el cuadro de la última.
+    id: "merck-tres-cantos",
+    boton: "MERCK TRES CANTOS",
+    plantilla: "plantillas/merck-tres-cantos.pdf",
+    archivo: (datos) => `DOCU ESPECIAL MERCK TRES CANTOS - ${datos.trabajador}.pdf`,
+    pagina: -1,
+    campos: [
+      // Las cuatro filas del cuadro: la columna de los valores empieza en 146,5
+      { valor: (d) => d.trabajador, x: 152, y: 601.8, tamano: 10, ancho: 412 },
+      { valor: () => EMPRESA, x: 152, y: 630.6, tamano: 10, ancho: 412 },
+      { valor: (d) => fechaCorta(d.fecha), x: 152, y: 659.5, tamano: 10, ancho: 412 },
+      { imagen: (d) => d.firma, x: 152, y: 673, ancho: 130, alto: 31 },
+    ],
+  },
+  {
+    // Ficha informativa de riesgos: 3 hojas, y la tabla de firmas está en la última.
+    id: "montesa-honda",
+    boton: "MONTESA HONDA",
+    plantilla: "plantillas/montesa-honda.pdf",
+    archivo: (datos) => `DOCU ESPECIAL MONTESA HONDA - ${datos.trabajador}.pdf`,
+    pagina: -1,
+    campos: [
+      // Tabla (72,6 | 203,2 | 339 | 452,3 | 545,4; la fila va de 496,9 a 565,3). La primera
+      // columna es de MONTESA, así que se deja en blanco.
+      { imagen: (d) => d.sello, x: 207, y: 500, ancho: 128, alto: 62, centrado: true },
+      { valor: (d) => d.trabajador, x: 395.7, y: 511, tamano: 8, ancho: 108, centrado: true },
+      { imagen: (d) => d.firma, x: 343, y: 516, ancho: 105, alto: 44, centrado: true },
+      { valor: (d) => fechaCorta(d.fecha), x: 498.9, y: 534.6, tamano: 10, ancho: 86, centrado: true },
+    ],
+  },
+  {
+    id: "plastipak",
+    boton: "PLASTIPAK",
+    plantilla: "plantillas/plastipak.pdf",
+    archivo: (datos) => `DOCU ESPECIAL PLASTIPAK - ${datos.trabajador}.pdf`,
+    pagina: 0, // la hoja es tamaño carta, no A4
+    campos: [
+      { valor: () => EMPRESA, x: 160, y: 176.8, tamano: 11, ancho: 375 },
+      // Primera fila de la tabla (57,4 | 305,4 | 390,6 | 560,8; la fila va de 341,6 a 382,4)
+      { valor: (d) => d.trabajador, x: 181.4, y: 365.9, tamano: 11, ancho: 240, centrado: true },
+      { valor: (d) => fechaCorta(d.fecha), x: 348, y: 365.9, tamano: 11, ancho: 78, centrado: true },
+      { imagen: (d) => d.firma, x: 394, y: 344, ancho: 163, alto: 36, centrado: true },
+    ],
+  },
+  {
+    // Anexo de PRL de Telefónica. El impreso relleno a mano mezclaba letras de 9, 12 y 18 puntos;
+    // aquí va todo a 11, del tamaño del texto del propio documento.
+    id: "telefonica",
+    boton: "TELEFONICA",
+    plantilla: "plantillas/telefonica.pdf",
+    archivo: (datos) => `DOCU ESPECIAL TELEFONICA - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      // "la empresa ……………… con N.I.F. / C.I.F……., y en su nombre D./Dña. ………………,"
+      { valor: () => EMPRESA, x: 382.7, y: 256, tamano: 11, ancho: 196, centrado: true },
+      // El hueco del C.I.F. es muy corto, así que este va algo más pequeño a la fuerza
+      { valor: () => CIF, x: 129.2, y: 269, tamano: 8.5, ancho: 42, centrado: true },
+      { valor: () => REPRESENTANTE, x: 419.3, y: 269, tamano: 11, ancho: 238, centrado: true },
+      // La fila de la tabla (90 | 162 | 401,6 | 527,8; la fila va de 420,5 a 473,3)
+      { valor: (d) => d.dni, x: 126, y: 450.8, tamano: 11, ancho: 66, centrado: true },
+      { valor: (d) => d.trabajador, x: 281.8, y: 450.8, tamano: 11, ancho: 230, centrado: true },
+      { imagen: (d) => d.firma, x: 405, y: 424, ancho: 119, alto: 45, centrado: true },
+      { imagen: (d) => d.sello, x: 300, y: 505, ancho: 100, alto: 74 }, // "Firma y sello de la empresa:"
+      // El bloque de abajo, tal y como se venía rellenando a mano
+      { valor: (d) => d.puesto, x: 116, y: 605, tamano: 11, ancho: 300 },
+      { valor: (d) => d.trabajador, x: 172, y: 623, tamano: 11, ancho: 300 },
+      { valor: () => CIF, x: 105, y: 640.9, tamano: 11, ancho: 300 },
+      // "En……………… a …… de ………… de 20…."
+      { valor: () => LUGAR, x: 359.4, y: 710, tamano: 11, ancho: 76, centrado: true },
+      { valor: (d) => dosCifras(d.fecha.getDate()), x: 418.8, y: 710, tamano: 11, ancho: 17, centrado: true },
+      // El hueco del mes son 57 puntos, así que un mes largo como SEPTIEMBRE se encoge a la fuerza
+      { valor: (d) => MESES[d.fecha.getMonth()].toUpperCase(), x: 473.5, y: 710, tamano: 11, ancho: 57, centrado: true },
+      { valor: (d) => String(d.fecha.getFullYear()).slice(-2), x: 537.6, y: 710, tamano: 11, ancho: 13, centrado: true },
+    ],
+  },
 ];
+
+// Los botones de los dos estadios van siempre los primeros: son documentos de sitios concretos
+// (los campos de fútbol) y se piden mucho. Los demás, por orden alfabético, para encontrarlos de
+// un vistazo sin tener que leerlos todos.
+const PRIMEROS = ["real-madrid", "atleti"];
+
+/** Los documentos especiales en el orden en que se ponen los botones en la pantalla. */
+export function ordenados() {
+  const primeros = PRIMEROS.map((id) => ESPECIALES.find((e) => e.id === id)).filter(Boolean);
+  const resto = ESPECIALES.filter((e) => !PRIMEROS.includes(e.id))
+    .sort((a, b) => a.boton.localeCompare(b.boton, "es"));
+  return [...primeros, ...resto];
+}
 
 /** Los documentos que descarga el botón de una plataforma (casi siempre, uno). */
 export function documentosDe(especial) {
@@ -244,14 +410,22 @@ const FUENTES = {
   "Courier-Bold": StandardFonts.CourierBold,
 };
 
+/**
+ * Pega una imagen (la firma o el sello) dentro del hueco que marca el campo. La imagen se encoge
+ * lo justo para caber sin deformarse; con "centrado" queda en el medio del hueco y, si no, pegada
+ * a su esquina de arriba a la izquierda, que es como estaban hechos los documentos más antiguos.
+ * Centrarla es lo que permite meter una firma en la casilla de una tabla sin taparle las rayas.
+ */
 async function pegarImagen(doc, pagina, bytes, campo, operadores) {
   if (!bytes) return;
   const imagen = await incrustarImagen(doc, bytes);
   const escala = Math.min(campo.ancho / imagen.ancho, campo.alto / imagen.alto);
   const ancho = imagen.ancho * escala;
   const alto = imagen.alto * escala;
+  const x = campo.centrado ? campo.x + (campo.ancho - ancho) / 2 : campo.x;
+  const y = campo.centrado ? campo.y + (campo.alto - alto) / 2 : campo.y;
   const nombre = anadirRecurso(doc, pagina, "XObject", "ImgEspecial", imagen.ref);
-  const matriz = multiplicar([ancho, 0, 0, -alto, campo.x, campo.y + alto], invertir(transformacion(doc, pagina)));
+  const matriz = multiplicar([ancho, 0, 0, -alto, x, y + alto], invertir(transformacion(doc, pagina)));
   operadores.push(`q ${matriz.map(numero).join(" ")} cm /${nombre} Do Q`);
 }
 

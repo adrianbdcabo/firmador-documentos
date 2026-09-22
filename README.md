@@ -69,9 +69,28 @@ Quitar un ITA de la carpeta compartida solo pueden los correos de `CORREOS_ADMIN
    dónde va cada dato (en puntos desde arriba a la izquierda, con la "y" en la línea base del texto, y el
    ancho del hueco para que el texto se encoja si no cabe).
 
-Ahora mismo hay ocho: IESE MADRID, CUN MADRID, REAL MADRID, ATLETI, THALES, SANDOZ, CEPSA y PHARMAMAR
-(SANDOZ descarga dos, RECIBI SANDOZ e INFO SANDOZ, y CEPSA otros dos, ANEXO 12 CEPSA y ANEXO 24 CEPSA) (el orden de los
-botones es el de la lista en `js/especiales.js`).
+Ahora mismo hay trece: REAL MADRID, ATLETI, CEPSA, CUN MADRID, IESE MADRID, MERCK TRES CANTOS,
+MONTESA HONDA, PHARMAMAR, PLASTIPAK, SANDOZ, TALGO, TELEFONICA y THALES. Tres de ellos descargan
+dos documentos: SANDOZ (RECIBI e INFO), CEPSA (ANEXO 12 y ANEXO 24) y TALGO (REGISTRO DE MEDIO
+AMBIENTE y ACUSE RECIBO).
+
+**El orden de los botones** no es el de la lista: lo decide `ordenados()` en `js/especiales.js`.
+REAL MADRID y ATLETI van siempre los primeros, porque son de sitios concretos y se piden mucho, y
+el resto va por orden alfabético.
+
+Al rellenar, la web no copia literalmente cómo se hacían estos impresos a mano: escribe todo del
+mismo tamaño y en negro (aunque el original tuviera la fecha en rojo o cada dato de una letra), y
+centra las firmas dentro de su casilla para que no tapen las rayas de las tablas.
+
+### El sello de la empresa
+
+El sello está en `recursos/sello-temps.jpeg` y la web lo pega al generar cada documento, así que
+para cambiarlo basta con sustituir ese archivo. La excepción son tres plantillas (CEPSA ANEXO 24,
+CUN MADRID e IESE MADRID) que lo traen ya dibujado dentro; para esas hay que ejecutar además:
+
+```sh
+node scripts/sello-en-plantillas.mjs
+```
 
 ## Desarrollo
 

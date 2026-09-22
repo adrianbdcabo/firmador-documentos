@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
 
-import { documentosDe, ESPECIALES, generar } from "../js/especiales.js";
+import { documentosDe, ESPECIALES, generar, ordenados } from "../js/especiales.js";
 import { fechaDeHoy } from "../js/fecha.js";
 import { deHojaSuelta, desdeImagen, desdePdf } from "../js/firma.js";
 import { decodificar, png, pngParaPdf } from "../js/imagenes.js";
@@ -343,6 +343,93 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
         for (const l of suyas) assert.ok(l.bbox[2] <= derecha + 0.5, `${especial.boton}: acaba en ${l.bbox[2].toFixed(1)}, el hueco en ${derecha.toFixed(1)}`);
       }
     }
+  });
+
+  test("los botones van en orden: los dos estadios primero y el resto alfabético", () => {
+    const botones = ordenados().map((e) => e.boton);
+    assert.deepEqual(botones.slice(0, 2), ["REAL MADRID", "ATLETI"]);
+    const resto = botones.slice(2);
+    assert.deepEqual(resto, [...resto].sort((a, b) => a.localeCompare(b, "es")), "el resto, por orden alfabético");
+    assert.equal(botones.length, ESPECIALES.length, "no se pierde ni se repite ningún botón");
+  });
+
+  test("documentos especiales nuevos: TALGO, MERCK, MONTESA, PLASTIPAK y TELEFONICA", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = {
+      trabajador: resultado.trabajador,
+      dni: resultado.dni,
+      puesto: resultado.puesto,
+      firma: resultado.firma,
+      sello: SELLO,
+      fecha: new Date(2026, 8, 22),
+      apellidos: "PUCHOL VIÑA",
+      nombre: "IGNACIO CARLOS",
+    };
+    // [id, índice del documento, nombre del archivo, páginas, textos que tienen que salir]
+    const casos = [
+      ["talgo", 0, `REGISTRO DE MEDIO AMBIENTE TALGO - ${resultado.trabajador}.pdf`, 4,
+        [resultado.trabajador, resultado.puesto, "TALGO LAS MATAS II", "22/09/2026", "MADRID", "SEPTIEMBRE", "X"]],
+      ["talgo", 1, `ACUSE RECIBO TALGO - ${resultado.trabajador}.pdf`, 1,
+        [resultado.puesto, "PUCHOL VIÑA", "IGNACIO CARLOS", "22/09/2026", "MADRID", "X"]],
+      ["merck-tres-cantos", 0, `DOCU ESPECIAL MERCK TRES CANTOS - ${resultado.trabajador}.pdf`, 4,
+        [resultado.trabajador, "TEMPS MULTIWORK ETT", "22/09/2026"]],
+      ["montesa-honda", 0, `DOCU ESPECIAL MONTESA HONDA - ${resultado.trabajador}.pdf`, 3,
+        [resultado.trabajador, "22/09/2026"]],
+      ["plastipak", 0, `DOCU ESPECIAL PLASTIPAK - ${resultado.trabajador}.pdf`, 1,
+        [resultado.trabajador, "TEMPS MULTIWORK ETT", "22/09/2026"]],
+      ["telefonica", 0, `DOCU ESPECIAL TELEFONICA - ${resultado.trabajador}.pdf`, 1,
+        [resultado.trabajador, resultado.dni, resultado.puesto, "TEMPS MULTIWORK ETT", "SOLEDAD FERNANDEZ", "B01130186", "MADRID"]],
+    ];
+    for (const [id, cual, archivo, numeroPaginas, esperados] of casos) {
+      const documento = documentosDe(ESPECIALES.find((e) => e.id === id))[cual];
+      assert.equal(documento.archivo(datos), archivo);
+      const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${documento.plantilla}`, import.meta.url)));
+      const pdf = await generar(documento, plantilla, datos);
+      assert.equal(await paginas(pdf), numeroPaginas, `${archivo}: páginas`);
+      const indice = documento.pagina < 0 ? numeroPaginas + documento.pagina : documento.pagina;
+      const contenido = (await texto(pdf, indice)).replace(/\s+/g, " ");
+      for (const esperado of esperados) assert.ok(contenido.includes(esperado), `${archivo}: falta "${esperado}"`);
+      assert.ok(await llevaImagen(pdf, datos.firma, indice), `${archivo}: lleva la firma`);
+    }
+  });
+
+  test("la firma y el sello no se salen de su casilla", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, puesto: resultado.puesto, firma: resultado.firma, sello: SELLO, fecha: new Date(2026, 8, 22), apellidos: "PUCHOL VIÑA", nombre: "IGNACIO CARLOS" };
+    for (const documento of ESPECIALES.flatMap((e) => documentosDe(e))) {
+      const huecos = documento.campos.filter((c) => c.imagen);
+      if (!huecos.length) continue;
+      const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${documento.plantilla}`, import.meta.url)));
+      const numeroPaginas = await paginas(plantilla);
+      const indice = documento.pagina < 0 ? numeroPaginas + documento.pagina : documento.pagina;
+      const antes = new Set((await imagenes(plantilla, indice)).map((im) => im.bbox.map(Math.round).join()));
+      const pdf = await generar(documento, plantilla, datos);
+      const nuevas = (await imagenes(pdf, indice)).filter((im) => !antes.has(im.bbox.map(Math.round).join()));
+      // Cada imagen pegada tiene que caber entera dentro del hueco que le marca su campo: es lo
+      // que evita que una firma se salga de su casilla y tape las rayas de la tabla.
+      for (const im of nuevas) {
+        const [x0, y0, x1, y1] = im.bbox;
+        const cabe = huecos.some((c) => x0 >= c.x - 0.5 && x1 <= c.x + c.ancho + 0.5 && y0 >= c.y - 0.5 && y1 <= c.y + c.alto + 0.5);
+        assert.ok(cabe, `${documento.plantilla}: la imagen ${im.bbox.map((v) => v.toFixed(1))} se sale de su hueco`);
+      }
+    }
+  });
+
+  test("las plantillas que traen el sello dentro llevan el sello nuevo", async () => {
+    const sello = new Uint8Array(fs.readFileSync(new URL("../recursos/sello-temps.jpeg", import.meta.url)));
+    const iguales = (a, b) => a && a.length === b.length && a.every((v, i) => v === b[i]);
+    let encontrados = 0;
+    for (const archivo of ["cepsa-anexo-24.pdf", "cun-madrid.pdf", "iese-madrid.pdf"]) {
+      const bytes = new Uint8Array(fs.readFileSync(new URL(`../plantillas/${archivo}`, import.meta.url)));
+      for (let n = 0; n < (await paginas(bytes)); n++) {
+        for (const im of await imagenes(bytes, n)) {
+          if (im.ancho !== 371 || im.alto !== 275) continue; // el sello, por su tamaño
+          assert.ok(iguales(im.datos, sello), `${archivo}: el sello incrustado no es el nuevo`);
+          encontrados++;
+        }
+      }
+    }
+    assert.equal(encontrados, 3, "las tres plantillas llevan su sello");
   });
 
   test("TA2: los datos del trabajador y la fecha de efectos del día", async () => {
