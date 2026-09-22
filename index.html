@@ -95,6 +95,7 @@
     <p class="creditos pequeno suave">
       Creado por Adrián Barroso de Cabo · © 2026. Todos los derechos reservados.
       <span id="nota-privacidad">Los documentos se procesan en este navegador: no se envían a ningún servidor.</span>
+      <button type="button" id="btn-privacidad" class="enlace pequeno">Privacidad</button>
     </p>
   </main>
 
@@ -106,9 +107,42 @@
       Si subes otro del mismo día, se queda el que se sacó más tarde del Sistema RED.
     </p>
     <div id="lista-itas" class="lista-itas"></div>
+    <div id="lista-accesos" class="lista-itas" hidden></div>
     <div class="dialogo-botones">
+      <button type="button" id="btn-accesos" class="enlace pequeno" hidden>Ver quién los ha usado</button>
       <button type="button" id="anadir-ita" class="boton secundario">Añadir ITA…</button>
       <button type="button" id="cerrar-itas" class="boton principal">Cerrar</button>
+    </div>
+  </dialog>
+
+  <dialog id="dialogo-privacidad">
+    <h3>Privacidad de esta herramienta</h3>
+    <div class="texto-largo pequeno">
+      <p>
+        <strong>Los documentos laborales no salen de tu ordenador.</strong> El PDF que cargas, la firma,
+        el sello, los documentos especiales y el TA2 se preparan aquí, dentro del navegador. No se
+        suben a ningún servidor ni quedan guardados en ninguna parte al cerrar la web.
+      </p>
+      <p id="privacidad-itas">
+        <strong>Los ITA sí se guardan.</strong>
+      </p>
+      <p>
+        <strong>Quién puede entrar.</strong> Solo se entra con el correo de la empresa y un código de un
+        solo uso. Cada vez que alguien sube, descarga o quita un ITA queda apuntado su correo, qué hizo
+        y cuándo; ese apunte se guarda 90 días y no contiene ningún dato de ningún trabajador.
+      </p>
+      <p>
+        <strong>Responsable.</strong> TEMPS MULTIWORK S.L.U. ETT. La información sobre el tratamiento de
+        los datos de las personas trabajadoras y cómo ejercer sus derechos es la que se les entrega al
+        contratar; para cualquier duda sobre esta herramienta, habla con tu responsable.
+      </p>
+      <p>
+        <strong>Úsala solo para lo que es.</strong> Descarga un ITA cuando haga falta mandárselo a una
+        empresa usuaria concreta, y no lo reenvíes ni lo guardes fuera de donde deba estar.
+      </p>
+    </div>
+    <div class="dialogo-botones">
+      <button type="button" id="cerrar-privacidad" class="boton principal">Cerrar</button>
     </div>
   </dialog>
 

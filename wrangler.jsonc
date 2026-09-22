@@ -12,13 +12,15 @@
   // (index.html, js/, plantillas/…) lo sirve Cloudflare directamente desde dist/ sin pasar por aquí.
   "main": "worker/index.js",
 
-  // La base de datos donde viven los ITA compartidos, creada en Europa occidental (WEUR).
+  // La base de datos donde viven los ITA compartidos. Está creada con jurisdicción "eu", que no
+  // es una preferencia sino una obligación: Cloudflare no puede guardarla ni procesarla fuera de
+  // la Unión Europea. Eso no se puede cambiar después, hay que crear la base ya con esa condición.
   // Las tablas se crean con `npm run esquema`.
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "firmador-itas",
-      "database_id": "9f9ee05f-3263-4eaf-81af-cddb1a585d15"
+      "database_name": "firmador-itas-eu",
+      "database_id": "8632dabe-ee55-412e-b713-aa44ccbf3193"
     }
   ],
 
@@ -27,8 +29,15 @@
     "CORREOS_ADMIN": "adrianbdcabo@gmail.com"
   },
 
-  // Limpieza automática cada madrugada (3:00 en hora universal): borra los ITA de más de 10 días.
+  // Limpieza automática cada madrugada (3:00 en hora universal): borra los ITA de más de 10 días
+  // y el rastro de accesos de más de 90.
   "triggers": {
     "crons": ["0 3 * * *"]
+  },
+
+  // Registros del servidor. Se dejan encendidos para poder ver si algo falla, pero el código se
+  // encarga de que en ellos no aparezca nunca ningún dato de ninguna persona.
+  "observability": {
+    "enabled": true
   }
 }

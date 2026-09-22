@@ -115,6 +115,13 @@ button { font: inherit; color: inherit; }
 /* Zona central */
 .area { flex: 1; min-height: 420px; margin: 16px 0; position: relative; display: flex; gap: 20px; }
 
+/* Texto largo de la ventana de privacidad: párrafos normales, que se ajusten solos al ancho.
+   Hace falta quitar el "pre-line" que llevan los demás diálogos (ahí los saltos de línea del
+   texto sí cuentan) para que aquí no aparezcan cortes donde no toca. */
+.texto-largo { max-width: 62ch; max-height: 62vh; overflow-y: auto; }
+.texto-largo p { margin: 0 0 12px; line-height: 1.5; white-space: normal; }
+#dialogo-privacidad { max-width: 620px; }
+
 /* DNI/NIE y NAF del trabajador, debajo de su nombre: se pueden seleccionar para copiarlos */
 .identificacion { margin: 2px 0 0; color: var(--texto); letter-spacing: 0.02em; user-select: text; }
 .identificacion:empty { display: none; }

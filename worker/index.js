@@ -12,9 +12,19 @@
 // código únicamente atiende las direcciones que empiezan por /api/ y a todo lo demás contesta 404.
 //
 // DÓNDE SE GUARDA
-// En una base de datos D1 (el SQLite de Cloudflare) creada en Europa occidental, con tres tablas:
-// los datos de cada ITA, la lista de personas que trae (para poder buscar un DNI al instante) y el
-// PDF partido en trozos. El esquema está en worker/esquema.sql.
+// En una base de datos D1 (el SQLite de Cloudflare) creada con jurisdicción "eu", lo que obliga a
+// Cloudflare a no sacar estos datos de la Unión Europea. Tiene cuatro tablas: los datos de cada
+// ITA, la lista de personas que trae (para poder buscar un DNI al instante), el PDF partido en
+// trozos y el rastro de accesos. El esquema está en worker/esquema.sql.
+//
+// EL RASTRO DE ACCESOS
+// Cada vez que alguien sube, descarga o quita un ITA se apunta su correo, qué hizo y cuándo. Ahí
+// no hay datos de ningún trabajador: solo quién de la oficina tocó qué informe. Sirve para poder
+// contestar "¿quién ha visto esto?" si algún día hace falta, y se borra solo a los 90 días.
+//
+// LOS ERRORES NO CUENTAN NADA
+// Si algo falla, en los registros de Cloudflare solo se escribe qué dirección falló y el tipo de
+// error, nunca el mensaje entero: un error de la base de datos podría llevar dentro un DNI.
 //
 // QUIÉN ENTRA
 // Delante de todo esto está Cloudflare Access: nadie llega hasta aquí sin haber entrado con su
@@ -28,6 +38,7 @@
 // además se repasa cada vez que alguien pide la lista, por si el cron hubiera fallado.
 
 const DIAS_GUARDADOS = 10; // el mismo número que usa la web en js/itas.js
+const DIAS_RASTRO = 90; // cuánto se guarda el rastro de quién sube y descarga
 const TROZO = 400000; // letras de base64 por fila: D1 no admite filas de más de 2 MB
 const MAXIMO_PDF = 20 * 1024 * 1024; // un ITA no llega ni de lejos; es solo un tope de seguridad
 
@@ -38,8 +49,10 @@ export default {
     try {
       return await atender(peticion, url, entorno);
     } catch (error) {
-      // Nunca se devuelve el error tal cual: podría contar cosas de la base de datos.
-      console.error(error);
+      // Ni se devuelve el error ni se escribe entero en los registros: el mensaje de un error de
+      // base de datos puede arrastrar el dato que se estaba guardando (un DNI, por ejemplo). Con
+      // saber qué dirección falló y de qué tipo fue el error ya se puede investigar.
+      console.error(`fallo en ${peticion.method} ${url.pathname}: ${error?.name ?? "Error"}`);
       return json({ error: "Ha fallado el servidor de ITA." }, 500);
     }
   },
@@ -47,7 +60,8 @@ export default {
   /** La limpieza de la madrugada que lanza Cloudflare (ver "triggers" en wrangler.jsonc). */
   async scheduled(evento, entorno) {
     const quitados = await limpiarAntiguos(entorno.DB);
-    console.log(`limpieza automática: ${quitados} ITA de más de ${DIAS_GUARDADOS} días borrados`);
+    const rastro = await limpiarRastro(entorno.DB);
+    console.log(`limpieza automática: ${quitados} ITA y ${rastro} líneas de rastro borradas`);
   },
 };
 
@@ -58,12 +72,13 @@ async function atender(peticion, url, entorno) {
   const ruta = url.pathname.slice("/api/".length);
 
   if (ruta === "itas" && peticion.method === "GET") return listar(base, quienEs(peticion, entorno));
-  if (ruta === "itas" && peticion.method === "POST") return guardar(peticion, base);
+  if (ruta === "itas" && peticion.method === "POST") return guardar(peticion, base, quienEs(peticion, entorno));
+  if (ruta === "accesos" && peticion.method === "GET") return rastro(base, quienEs(peticion, entorno));
   if (ruta === "itas/buscar" && peticion.method === "GET") return buscar(base, url.searchParams.get("documento") ?? "");
 
   // "itas/<id>/pdf" y "itas/<id>": el id lleva espacios y una barra vertical, así que va codificado.
   const pdf = /^itas\/(.+)\/pdf$/.exec(ruta);
-  if (pdf && peticion.method === "GET") return descargar(base, decodeURIComponent(pdf[1]));
+  if (pdf && peticion.method === "GET") return descargar(base, decodeURIComponent(pdf[1]), quienEs(peticion, entorno));
 
   const uno = /^itas\/(.+)$/.exec(ruta);
   if (uno && peticion.method === "DELETE") return borrar(base, decodeURIComponent(uno[1]), quienEs(peticion, entorno));
@@ -90,8 +105,9 @@ function quienEs(peticion, entorno) {
 /** La lista de ITA guardados, del más reciente al más antiguo, sin los PDF ni los trabajadores. */
 async function listar(base, quien) {
   await limpiarAntiguos(base); // por si el cron de la madrugada no llegó a ejecutarse
+  await limpiarRastro(base);
   const { results } = await base
-    .prepare("SELECT id, fecha, cuenta, referencia, emision, archivo, paginas, tamano, trabajador_count, subido FROM itas ORDER BY fecha DESC")
+    .prepare("SELECT id, fecha, cuenta, referencia, emision, archivo, paginas, tamano, trabajador_count, subido, subido_por FROM itas ORDER BY fecha DESC")
     .all();
   return json({
     almacen: "compartido",
@@ -106,7 +122,7 @@ async function listar(base, quien) {
  * Si ya hay uno de la misma cuenta y día, se queda el que se sacó más tarde del Sistema RED:
  * durante la jornada se dan altas nuevas, así que el de las 13:40 vale más que el de las 09:55.
  */
-async function guardar(peticion, base) {
+async function guardar(peticion, base, quien) {
   const cuerpo = await peticion.json().catch(() => null);
   const ficha = cuerpo?.ficha;
   const base64 = cuerpo?.pdf;
@@ -131,10 +147,11 @@ async function guardar(peticion, base) {
     base.prepare("DELETE FROM trabajadores WHERE ita_id = ?").bind(ficha.id),
     base.prepare("DELETE FROM trozos WHERE ita_id = ?").bind(ficha.id),
     base.prepare(`INSERT OR REPLACE INTO itas
-        (id, fecha, cuenta, referencia, emision, archivo, paginas, tamano, trabajador_count, subido)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        (id, fecha, cuenta, referencia, emision, archivo, paginas, tamano, trabajador_count, subido, subido_por)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(ficha.id, ficha.fecha, ficha.cuenta ?? null, ficha.referencia ?? null, ficha.emision ?? null,
-        ficha.archivo ?? null, ficha.paginas ?? null, ficha.tamano ?? null, trabajadores.length, subido),
+        ficha.archivo ?? null, ficha.paginas ?? null, ficha.tamano ?? null, trabajadores.length, subido, quien.correo || null),
+    apuntar(base, ficha.id, quien, "subida"),
   ];
   for (const t of trabajadores) {
     ordenes.push(base.prepare("INSERT INTO trabajadores (ita_id, documento, nombre, naf, alta, pagina) VALUES (?, ?, ?, ?, ?, ?)")
@@ -169,9 +186,10 @@ async function buscar(base, documento) {
 }
 
 /** El PDF de un ITA, pegando de nuevo sus trozos en orden. */
-async function descargar(base, id) {
+async function descargar(base, id, quien) {
   const { results } = await base.prepare("SELECT datos FROM trozos WHERE ita_id = ? ORDER BY n").bind(id).all();
   if (!results.length) return json({ error: "Ese ITA ya no está guardado." }, 404);
+  await apuntar(base, id, quien, "descarga").run();
   const bytes = deBase64(results.map((t) => t.datos).join(""));
   return new Response(bytes, {
     headers: { "Content-Type": "application/pdf", "Cache-Control": "no-store" },
@@ -182,10 +200,39 @@ async function descargar(base, id) {
 async function borrar(base, id, quien) {
   if (!quien.puedeBorrar) return json({ error: "No tienes permiso para quitar ITA." }, 403);
   await quitar(base, [id]);
+  await apuntar(base, id, quien, "borrado").run();
   return json({ borrado: true });
 }
 
+/**
+ * El rastro de quién ha usado los ITA, de lo más reciente a lo más antiguo. Solo lo pueden mirar
+ * los correos de CORREOS_ADMIN: es quién ha hecho qué dentro de la oficina.
+ */
+async function rastro(base, quien) {
+  if (!quien.puedeBorrar) return json({ error: "No tienes permiso para ver el registro." }, 403);
+  const { results } = await base
+    .prepare("SELECT ita_id, correo, accion, cuando FROM accesos ORDER BY cuando DESC LIMIT 500")
+    .all();
+  return json({ accesos: results, dias: DIAS_RASTRO });
+}
+
 // ------------------------------------------------------------------ apoyos
+
+/**
+ * Deja constancia de que alguien ha subido, descargado o quitado un ITA. Devuelve la orden sin
+ * ejecutarla, para poder meterla en el mismo lote que el resto cuando interese.
+ */
+function apuntar(base, itaId, quien, accion) {
+  return base.prepare("INSERT INTO accesos (ita_id, correo, accion, cuando) VALUES (?, ?, ?, ?)")
+    .bind(itaId, quien?.correo || null, accion, new Date().toISOString());
+}
+
+/** Borra el rastro de más de DIAS_RASTRO días. Devuelve cuántas líneas ha quitado. */
+async function limpiarRastro(base) {
+  const limite = new Date(Date.now() - DIAS_RASTRO * 86400000).toISOString();
+  const { meta } = await base.prepare("DELETE FROM accesos WHERE cuando < ?").bind(limite).run();
+  return meta?.changes ?? 0;
+}
 
 /** Borra los ITA cuya fecha de informe pasa de DIAS_GUARDADOS días. Devuelve cuántos ha quitado. */
 async function limpiarAntiguos(base) {
@@ -220,6 +267,7 @@ function comoFicha(fila) {
     tamano: fila.tamano,
     cuantos: fila.trabajador_count, // cuánta gente trae; la lista entera no hace falta para listar
     subido: fila.subido,
+    subidoPor: fila.subido_por,
   };
 }
 

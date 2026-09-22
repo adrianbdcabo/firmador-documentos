@@ -50,8 +50,15 @@ el más reciente, avisando si tiene más de 7 días (las empresas usuarias no su
 Se guardan en uno de dos sitios, y la web elige solo:
 
 - **La carpeta compartida** (en la web de Cloudflare): los ITA que sube cualquiera los ven
-  todos, así que basta con que uno suba el del día. Viven en una base de datos D1 creada en
-  Europa occidental y se borran a los 10 días, solos, de madrugada.
+  todos, así que basta con que uno suba el del día. Viven en una base de datos D1 creada con
+  **jurisdicción `eu`**, que obliga a Cloudflare a no sacarlos de la Unión Europea (eso no se
+  puede cambiar después: hay que crear la base ya con esa condición). Se borran a los 10 días,
+  solos, de madrugada.
+
+De cada ITA se apunta además **quién lo subió**, y cada subida, descarga y borrado queda en una
+tabla de accesos con el correo, la acción y la hora. Ahí no hay ningún dato de ningún trabajador:
+solo quién de la oficina tocó qué informe. Se borra solo a los 90 días y lo pueden consultar los
+correos de `CORREOS_ADMIN` desde el botón "Ver quién los ha usado" de la ventana de ITA.
 - **El almacén del navegador** (en cualquier otro sitio, como la copia de GitHub): los ITA no
   salen del ordenador y cada uno tiene los suyos. Es el respaldo si no hay servidor.
 

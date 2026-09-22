@@ -663,6 +663,9 @@ function contarDondeSeGuardan() {
   $("nota-privacidad").textContent = compartido
     ? "Los documentos laborales se procesan en este navegador y no se envían a ningún servidor. Los ITA sí: se guardan en la carpeta compartida de la empresa durante 10 días."
     : "Los documentos se procesan en este navegador: no se envían a ningún servidor.";
+  $("privacidad-itas").innerHTML = compartido
+    ? "<strong>Los ITA sí se guardan.</strong> Al subir uno, su PDF y la lista de personas que trae (nombre, DNI o NIE, número de afiliación y fecha de alta) se guardan en una base de datos de la empresa alojada en la Unión Europea, para que lo tengan todos los compañeros. Se borran solos a los 10 días y no se copian a ningún otro sitio."
+    : "<strong>Los ITA se quedan en este navegador.</strong> No se suben a ningún sitio: solo los ves tú, en este ordenador, y se borran solos a los 10 días.";
 }
 
 /**
@@ -729,7 +732,51 @@ Las empresas usuarias no suelen aceptarlo con más de 7 días: descarga un ITA d
 async function abrirITAs() {
   await refrescarITAs();
   pintarListaITAs();
+  // El registro de accesos solo lo puede mirar quien también puede borrar
+  $("btn-accesos").hidden = !estado.almacenITA.puedeBorrar;
+  $("btn-accesos").textContent = "Ver quién los ha usado";
+  $("lista-accesos").hidden = true;
   $("dialogo-itas").showModal();
+}
+
+/**
+ * Enseña u oculta el rastro: quién ha subido, descargado o quitado cada ITA y cuándo. No sale de
+ * ahí ningún dato de ningún trabajador, solo el correo del compañero que hizo cada cosa.
+ */
+async function alternarAccesos() {
+  const caja = $("lista-accesos");
+  const boton = $("btn-accesos");
+  if (!caja.hidden) {
+    caja.hidden = true;
+    boton.textContent = "Ver quién los ha usado";
+    return;
+  }
+  boton.textContent = "Ocultar el registro";
+  caja.hidden = false;
+  caja.replaceChildren();
+  const poner = (texto) => {
+    const linea = document.createElement("div");
+    linea.className = "linea-ita pequeno";
+    linea.textContent = texto;
+    caja.append(linea);
+  };
+  poner("Cargando…");
+  try {
+    const accesos = await itas.rastroDeAccesos();
+    caja.replaceChildren();
+    if (!accesos.length) {
+      poner("Todavía no hay nada apuntado.");
+      return;
+    }
+    for (const a of accesos) {
+      const cuando = new Date(a.cuando);
+      const fecha = `${cuando.toLocaleDateString("es-ES")} ${cuando.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`;
+      poner(`${fecha} · ${a.correo ?? "(sin correo)"} · ${a.accion} · ITA del ${itas.fechaBonita(a.ita_id.split("|")[1] ?? "")}`);
+    }
+  } catch (error) {
+    caja.replaceChildren();
+    poner(`No se ha podido cargar el registro: ${error.message ?? error}`);
+  }
 }
 
 /**
@@ -759,7 +806,8 @@ function pintarListaITAs() {
 
     const datos = document.createElement("span");
     datos.className = "pequeno";
-    datos.textContent = `${viejo ? "⚠" : "✓"} ${itas.fechaBonita(ficha.fecha)}${hora ? ` · sacado a las ${hora}` : ""} · ${ficha.cuantos} trabajadores · ${ficha.paginas} páginas${viejo ? ` · ${dias} días` : ""}`;
+    const quien = ficha.subidoPor ? ` · lo subió ${ficha.subidoPor}` : "";
+    datos.textContent = `${viejo ? "⚠" : "✓"} ${itas.fechaBonita(ficha.fecha)}${hora ? ` · sacado a las ${hora}` : ""} · ${ficha.cuantos} trabajadores · ${ficha.paginas} páginas${viejo ? ` · ${dias} días` : ""}${quien}`;
     if (viejo) datos.classList.add("aviso");
     linea.append(datos);
 
@@ -929,6 +977,10 @@ function iniciar() {
 
   new ResizeObserver(() => colocarPila()).observe($("pila"));
   new ResizeObserver(() => ajustarEspeciales()).observe($("tarjetas"));
+
+  $("btn-privacidad").addEventListener("click", () => $("dialogo-privacidad").showModal());
+  $("cerrar-privacidad").addEventListener("click", () => $("dialogo-privacidad").close());
+  $("btn-accesos").addEventListener("click", enOrden(alternarAccesos));
 
   crearBotonesEspeciales();
   refrescarITAs(); // los ITA guardados de otras veces

@@ -285,6 +285,11 @@ const ALMACEN_LOCAL = {
     return viejos.length;
   },
 
+  /** En el navegador no hay rastro que enseñar: los ITA no salen de este ordenador. */
+  async rastro() {
+    return [];
+  },
+
   /** Aquí la lista de trabajadores viene dentro de cada ficha, así que se busca en memoria. */
   async buscar(documento, fichas = null) {
     const buscado = normalizarDocumento(documento);
@@ -349,6 +354,14 @@ function almacenCompartido(puedeBorrar) {
     /** La limpieza de los de más de diez días la hace el servidor él solo, cada madrugada. */
     async limpiar() {
       return 0;
+    },
+
+    /**
+     * El rastro de quién ha subido, descargado o quitado ITA. Solo lo devuelve el servidor a los
+     * correos autorizados; aquí no hay datos de trabajadores, solo quién de la oficina hizo qué.
+     */
+    async rastro() {
+      return (await (await pedir("api/accesos")).json()).accesos ?? [];
     },
 
     /** Aquí busca el servidor: una consulta con índice, por muchos ITA que haya guardados. */
@@ -427,6 +440,11 @@ export async function borrarITA(id) {
  */
 export async function limpiarAntiguos(hoy = new Date()) {
   return (await almacen()).limpiar(hoy);
+}
+
+/** Quién ha subido, descargado o quitado ITA últimamente (solo en la carpeta compartida). */
+export async function rastroDeAccesos() {
+  return (await almacen()).rastro();
 }
 
 /**

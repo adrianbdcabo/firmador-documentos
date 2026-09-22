@@ -1,5 +1,6 @@
 -- © 2026 Adrián Barroso de Cabo.
--- Las tablas de la carpeta compartida de ITA (base de datos D1 "firmador-itas", en Europa).
+-- Las tablas de la carpeta compartida de ITA (base de datos D1 "firmador-itas-eu", creada con
+-- jurisdicción "eu": Cloudflare tiene prohibido sacar estos datos de la Unión Europea).
 -- Se crean con `npm run esquema` y no hace falta volver a tocarlas.
 
 -- Un ITA: el informe de trabajadores en alta de una cuenta de cotización en un día.
@@ -15,7 +16,8 @@ CREATE TABLE IF NOT EXISTS itas (
   paginas     INTEGER,
   tamano      INTEGER,         -- bytes del PDF
   trabajador_count INTEGER,    -- cuánta gente trae, para enseñarlo sin contar filas
-  subido      TEXT NOT NULL    -- cuándo se subió a la web, en hora universal
+  subido      TEXT NOT NULL,   -- cuándo se subió a la web, en hora universal
+  subido_por  TEXT             -- el correo de quien lo subió, que lo dice Cloudflare Access
 );
 
 -- Cada persona que sale en un ITA y en qué página está. El índice por documento es lo que hace
@@ -39,3 +41,16 @@ CREATE TABLE IF NOT EXISTS trozos (
   datos   TEXT NOT NULL,
   PRIMARY KEY (ita_id, n)
 );
+
+-- El rastro de quién hace qué con los ITA: quién sube uno, quién se lo descarga y quién lo quita.
+-- Aquí NO hay datos de los trabajadores: solo el correo del compañero, qué hizo y cuándo. Sirve
+-- para poder explicar quién ha visto qué si algún día hace falta, que es lo que pide la normativa
+-- de protección de datos ("responsabilidad proactiva"). Se guarda 90 días y se borra solo.
+CREATE TABLE IF NOT EXISTS accesos (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  ita_id  TEXT NOT NULL,   -- de qué ITA se trata (cuenta de cotización y fecha)
+  correo  TEXT,            -- quién lo hizo
+  accion  TEXT NOT NULL,   -- "subida", "descarga" o "borrado"
+  cuando  TEXT NOT NULL    -- en hora universal
+);
+CREATE INDEX IF NOT EXISTS idx_accesos_cuando ON accesos (cuando);
