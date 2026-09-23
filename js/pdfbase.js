@@ -304,3 +304,47 @@ export function contenidoPagina(doc, pagina) {
   }
   return bytes;
 }
+
+/**
+ * Un texto listo para meterlo entre paréntesis en un PDF con codificación WinAnsi, que es la de
+ * las fuentes normales (no las "Identity-H", donde las letras se piden por su número de glifo).
+ * Se escapan los paréntesis y la barra, que el PDF usa para lo suyo, y las letras de fuera del
+ * ASCII van con su código en octal. Lo que no existe en WinAnsi (una letra griega, por ejemplo)
+ * no se puede escribir con esa fuente y se descarta.
+ */
+export function escaparWinAnsi(texto) {
+  let salida = "";
+  for (const caracter of texto) {
+    const codigo = winAnsi(caracter);
+    if (codigo === null) continue;
+    if (codigo === 40 || codigo === 41 || codigo === 92) salida += `\\${String.fromCharCode(codigo)}`;
+    else if (codigo < 32 || codigo > 126) salida += `\\${codigo.toString(8).padStart(3, "0")}`;
+    else salida += String.fromCharCode(codigo);
+  }
+  return salida;
+}
+
+// Caracteres de WinAnsi que no coinciden con Unicode (los demás sí, hasta el 255).
+const WINANSI_ESPECIALES = { "€": 128, "‚": 130, "ƒ": 131, "„": 132, "…": 133, "†": 134, "‡": 135, "ˆ": 136, "‰": 137, "Š": 138, "‹": 139, "Œ": 140, "Ž": 142, "‘": 145, "’": 146, "“": 147, "”": 148, "•": 149, "–": 150, "—": 151, "˜": 152, "™": 153, "š": 154, "›": 155, "œ": 156, "ž": 158, "Ÿ": 159 };
+
+/** El código WinAnsi de una letra, o null si esa letra no está en WinAnsi. */
+export function winAnsi(caracter) {
+  const codigo = caracter.codePointAt(0);
+  if (codigo <= 255) return codigo;
+  return WINANSI_ESPECIALES[caracter] ?? null;
+}
+
+// El camino de vuelta: de código WinAnsi a letra. Se construye una sola vez al cargar el módulo.
+const LETRAS_WINANSI = (() => {
+  const letras = new Map();
+  for (const [letra, codigo] of Object.entries(WINANSI_ESPECIALES)) letras.set(codigo, letra);
+  return letras;
+})();
+
+/** La letra que le corresponde a un código de WinAnsi (0-255), o null si ese código no dibuja nada. */
+export function letraWinAnsi(codigo) {
+  if (codigo < 32 || codigo === 127) return null;
+  if (LETRAS_WINANSI.has(codigo)) return LETRAS_WINANSI.get(codigo);
+  if (codigo > 127 && codigo < 160) return null; // huecos de la tabla
+  return String.fromCharCode(codigo);
+}

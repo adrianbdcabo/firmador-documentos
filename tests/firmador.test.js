@@ -330,7 +330,7 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       const pdf = await generar(especial, plantilla, datos);
       const indice = especial.pagina < 0 ? (await paginas(pdf)) + especial.pagina : especial.pagina;
       const todas = await lineas(pdf, indice);
-      for (const campo of especial.campos.filter((c) => c.valor && [largo, puesto].includes(c.valor(datos)))) {
+      for (const campo of (especial.campos ?? []).filter((c) => c.valor && [largo, puesto].includes(c.valor(datos)))) {
         const [izquierda, derecha] = campo.centrado ? [campo.x - campo.ancho / 2, campo.x + campo.ancho / 2] : [campo.x, campo.x + campo.ancho];
         const alto = (campo.lineas ?? 1) * (campo.interlineado ?? campo.tamano * 1.2);
         // Las líneas de este campo: las que caen en su hueco y están formadas por palabras del texto
@@ -407,11 +407,42 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     }
   });
 
+  test("MACADAMIA: el nombre y el DNI van dentro de la frase, que se vuelve a justificar", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, fecha: new Date(2026, 8, 23) };
+    const especial = ESPECIALES.find((e) => e.id === "macadamia");
+    assert.equal(especial.archivo(datos), `DOCU ESPECIAL MACADAMIA - ${resultado.trabajador}.pdf`);
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
+
+    // La plantilla se descarga desde el navegador, así que no puede llevar datos de nadie.
+    const enBlanco = (await texto(plantilla)).replace(/\s+/g, "");
+    assert.ok(!/JHON|JAIRO|CARVAJAL|VERGARA|Z3220161M/.test(enBlanco), "la plantilla no lleva el nombre del ejemplo");
+
+    const pdf = await generar(especial, plantilla, datos);
+    const contenido = (await texto(pdf)).replace(/\s+/g, "");
+    assert.ok(contenido.includes(resultado.trabajador.replace(/\s+/g, "")), "sale el nombre del trabajador");
+    assert.ok(contenido.includes(resultado.dni), "sale su DNI");
+    assert.ok(contenido.includes("23.09.2026"), "sale la fecha del día");
+    assert.ok(!contenido.includes("00000000A"), "no queda el DNI de relleno");
+
+    // El párrafo tiene que seguir justificado entre los mismos márgenes que el documento original:
+    // todas las líneas empiezan en el margen izquierdo y, menos la última, acaban en el derecho.
+    const renglones = (await lineas(pdf)).filter((l) => /presente|evaluaci|Centro de Trabajo/.test(l.chars.map((c) => c.c).join("")));
+    assert.ok(renglones.length >= 2, "el párrafo ocupa varias líneas");
+    renglones.forEach((renglon, i) => {
+      const letras = renglon.chars.filter((ch) => ch.glifo && ch.c.trim() !== "");
+      const izquierda = letras[0].glifo.origen[0];
+      const derecha = letras.at(-1).glifo.origen[0] + letras.at(-1).glifo.espaciado;
+      assert.ok(Math.abs(izquierda - 72) < 0.5, `línea ${i + 1}: empieza en ${izquierda.toFixed(1)} y no en el margen`);
+      if (i < renglones.length - 1) assert.ok(Math.abs(derecha - 523.5) < 1, `línea ${i + 1}: acaba en ${derecha.toFixed(1)} y no en el margen`);
+    });
+  });
+
   test("la firma y el sello no se salen de su casilla", async () => {
     const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
     const datos = { trabajador: resultado.trabajador, dni: resultado.dni, puesto: resultado.puesto, firma: resultado.firma, sello: SELLO, fecha: new Date(2026, 8, 22), apellidos: "PUCHOL VIÑA", nombre: "IGNACIO CARLOS" };
     for (const documento of ESPECIALES.flatMap((e) => documentosDe(e))) {
-      const huecos = documento.campos.filter((c) => c.imagen);
+      const huecos = (documento.campos ?? []).filter((c) => c.imagen);
       if (!huecos.length) continue;
       const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${documento.plantilla}`, import.meta.url)));
       const numeroPaginas = await paginas(plantilla);

@@ -27,8 +27,9 @@
 // escribe todo del mismo tamaño y en negro: queda más limpio y más uniforme.
 
 import { fechaDeHoy, MESES } from "./fecha.js";
+import { generarMacadamia } from "./macadamia.js";
 import { StandardFonts } from "../vendor/pdf-lib/pdf-lib.esm.min.js";
-import { PDFDocument, aPdf, anadirContenido, anadirRecurso, guardar, incrustarImagen, invertir, multiplicar, numero, transformacion } from "./pdfbase.js";
+import { PDFDocument, aPdf, anadirContenido, anadirRecurso, escaparWinAnsi, guardar, incrustarImagen, invertir, multiplicar, numero, transformacion, winAnsi } from "./pdfbase.js";
 
 const TAMANO_MINIMO = 6; // si el texto no cabe, se encoge hasta aquí
 
@@ -343,6 +344,17 @@ export const ESPECIALES = [
       { valor: (d) => String(d.fecha.getFullYear()).slice(-2), x: 537.6, y: 710, tamano: 11, ancho: 13, centrado: true },
     ],
   },
+  {
+    // El recibí de la evaluación de riesgos del centro de GMV. Este no es un impreso con huecos de
+    // puntitos sino una carta escrita en Word: el nombre y el DNI van metidos en medio de una
+    // frase justificada, así que al cambiarlos hay que recomponer el párrafo entero. Eso lo hace
+    // js/macadamia.js, y por eso esta ficha trae "rellenar" en vez de "campos".
+    id: "macadamia",
+    boton: "MACADAMIA",
+    plantilla: "plantillas/macadamia.pdf",
+    archivo: (datos) => `DOCU ESPECIAL MACADAMIA - ${datos.trabajador}.pdf`,
+    rellenar: generarMacadamia,
+  },
 ];
 
 // Los botones de los dos estadios van siempre los primeros: son documentos de sitios concretos
@@ -365,6 +377,9 @@ export function documentosDe(especial) {
 
 /** PDF de un documento especial relleno con los datos del trabajador. */
 export async function generar(especial, plantilla, datos) {
+  // Los documentos que no son impresos de huecos traen su propio relleno (de momento, MACADAMIA).
+  if (especial.rellenar) return especial.rellenar(plantilla, datos);
+
   const doc = await PDFDocument.load(plantilla, { updateMetadata: false });
   const indice = especial.pagina < 0 ? doc.getPageCount() + especial.pagina : especial.pagina;
   const pagina = doc.getPage(indice);
@@ -397,7 +412,7 @@ export async function generar(especial, plantilla, datos) {
       const inicio = campo.centrado ? campo.x - (anchoTexto * estrechar) / 2 : campo.x;
       const [x, y] = aPdf(doc, pagina, [inicio, campo.y + i * (campo.interlineado ?? tamano * 1.2)]);
       const tz = estrechar < 1 ? `${numero(estrechar * 100)} Tz ` : "";
-      operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf ${tz}1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escapar(linea)}) Tj ET Q`);
+      operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf ${tz}1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escaparWinAnsi(linea)}) Tj ET Q`);
     });
   }
   anadirContenido(doc, pagina, operadores.join("\n"));
@@ -477,26 +492,4 @@ function tamanoQueCabe(fuente, texto, tamano, ancho) {
   let actual = tamano;
   while (actual > TAMANO_MINIMO && anchoDelTexto(fuente, texto, actual) > ancho) actual -= 0.25;
   return actual;
-}
-
-/** Texto para un PDF con codificación WinAnsi: se escapa todo lo que no sea ASCII imprimible. */
-function escapar(texto) {
-  let salida = "";
-  for (const caracter of texto) {
-    const codigo = winAnsi(caracter);
-    if (codigo === null) continue;
-    if (codigo === 40 || codigo === 41 || codigo === 92) salida += `\\${String.fromCharCode(codigo)}`;
-    else if (codigo < 32 || codigo > 126) salida += `\\${codigo.toString(8).padStart(3, "0")}`;
-    else salida += String.fromCharCode(codigo);
-  }
-  return salida;
-}
-
-// Caracteres de WinAnsi que no coinciden con Unicode (los demás sí, hasta el 255).
-const WINANSI_ESPECIALES = { "€": 128, "‚": 130, "ƒ": 131, "„": 132, "…": 133, "†": 134, "‡": 135, "ˆ": 136, "‰": 137, "Š": 138, "‹": 139, "Œ": 140, "Ž": 142, "‘": 145, "’": 146, "“": 147, "”": 148, "•": 149, "–": 150, "—": 151, "˜": 152, "™": 153, "š": 154, "›": 155, "œ": 156, "ž": 158, "Ÿ": 159 };
-
-function winAnsi(caracter) {
-  const codigo = caracter.codePointAt(0);
-  if (codigo <= 255) return codigo;
-  return WINANSI_ESPECIALES[caracter] ?? null;
 }
