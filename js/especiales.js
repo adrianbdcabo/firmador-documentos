@@ -357,6 +357,80 @@ export const ESPECIALES = [
   },
 ];
 
+// ------------------------------------------------------------------ registro de EPI antiguo
+
+// El modelo viejo del registro de entrega de equipos de protección individual. Se guarda por si
+// una empresa usuaria no acepta el registro nuevo. Su botón no va con los demás documentos
+// especiales, sino al lado del TA2, porque no es de ninguna plataforma en concreto.
+//
+// Los diez EPI del impreso, en el orden en que salen, con la fila que ocupan en la tabla (de qué
+// altura a qué altura) y con la casilla que trae marcada el impreso de fábrica.
+export const EPIS = [
+  { id: "botas", nombre: "Botas / Calzado de seguridad", fila: [304.7, 316.3], marca: "empresa" },
+  { id: "guantes", nombre: "Guantes de protección contra riesgos mecánicos", fila: [316.7, 328.3], marca: "no-uso" },
+  { id: "casco", nombre: "Casco de Protección", fila: [328.9, 345.4], marca: "no-uso" },
+  { id: "chaleco", nombre: "Chaleco alta visibilidad", fila: [345.9, 357.5], marca: "no-uso" },
+  { id: "ropa", nombre: "Ropa de trabajo para ambientes refrigerados (polar, chaqueta, etc.)", fila: [358.0, 378.6], marca: "no-uso" },
+  { id: "gafas", nombre: "Gafas de Protección Ocular", fila: [379.1, 390.8], marca: "no-uso" },
+  { id: "tapones", nombre: "Tapones auditivos", fila: [391.3, 402.8], marca: "no-uso" },
+  { id: "mascarilla", nombre: "Mascarilla autofiltrante para partículas gama alta y soldadura", fila: [403.3, 424.3], marca: "no-uso" },
+  { id: "pantalla", nombre: "Pantalla facial con filtro 100V, tono variable 8-12", fila: [424.7, 436.3], marca: "no-uso" },
+  { id: "otros", nombre: "Otros", fila: [436.8, 448.4], marca: "no-uso" },
+];
+
+// Las tres columnas que se pueden marcar, con el centro de cada una en el impreso.
+export const COLUMNAS_EPI = [
+  { id: "no-uso", titulo: "NO USO", x: 341.1 },
+  { id: "empresa", titulo: "Aporta empresa usuaria", x: 383.7 },
+  { id: "trabajador", titulo: "Aporta trabajador", x: 461.8 },
+];
+
+/** La casilla marcada de un EPI: la que haya elegido el usuario y, si no hay nada, NO USO. */
+const marcaDe = (datos, epi) => datos.epis?.[epi.id] || "no-uso";
+/** La línea de escritura de una fila de la tabla: centrada en su alto. */
+const lineaDeFila = (epi) => (epi.fila[0] + epi.fila[1]) / 2 + 2.9;
+
+/**
+ * El puesto tal y como cabe en la casilla del DNI, que es estrecha. Los puestos de auxiliar se
+ * escriben con sus siglas, ASL; los demás (camarero, cocinero, mozo…) caben tal cual.
+ */
+const puestoCorto = (puesto = "") => (/^AUXILIAR/i.test(puesto.trim()) ? "ASL" : puesto.trim());
+
+export const EPIS_ANTIGUOS = {
+  id: "epis-antiguos",
+  boton: "EPIs antiguos",
+  plantilla: "plantillas/epis-antiguos.pdf",
+  archivo: (datos) => `EPIS - ${datos.trabajador}.pdf`,
+  pagina: 0,
+  pregunta: "epis", // antes de generarlo, la web pregunta qué EPI lleva cada casilla
+  campos: [
+    // La fila de arriba. El nombre y los apellidos van en sus casillas (115→222,6 y 276,5→443,1)
+    // y el DNI en la suya (470,3→567,7), con el puesto debajo.
+    { valor: (d) => d.nombre, x: 168.8, y: 165, tamano: 10, ancho: 105, centrado: true },
+    { valor: (d) => d.apellidos, x: 359.8, y: 165, tamano: 10, ancho: 164, centrado: true },
+    { valor: (d) => d.dni, x: 519, y: 161, tamano: 10, ancho: 95, centrado: true },
+    { valor: (d) => puestoCorto(d.puesto), x: 519, y: 171, tamano: 8, ancho: 95, centrado: true },
+    // Las diez fechas de la columna de la izquierda (46,4→112,8), todas la de hoy.
+    ...EPIS.map((epi) => ({
+      valor: (d) => fechaCorta(d.fecha),
+      x: 79.6, y: lineaDeFila(epi), tamano: 8, ancho: 64, centrado: true,
+    })),
+    // Y la X de cada fila, en la columna que se haya elegido.
+    ...EPIS.flatMap((epi) => COLUMNAS_EPI.map((columna) => ({
+      valor: (d) => (marcaDe(d, epi) === columna.id ? "X" : ""),
+      x: columna.x, y: lineaDeFila(epi), tamano: 9, ancho: 26, centrado: true,
+    }))),
+    // Lo que se escriba detrás de "Otros:" (el rótulo acaba en 143,4 y la casilla en 326,6).
+    { valor: (d) => d.otrosEpi ?? "", x: 148, y: lineaDeFila(EPIS.at(-1)), tamano: 8, ancho: 175 },
+    // El pie: "En MADRID a 23 de SEPTIEMBRE de 2026" y la firma del trabajador en su hueco.
+    {
+      valor: (d) => `En ${LUGAR} a ${d.fecha.getDate()} de ${MESES[d.fecha.getMonth()].toUpperCase()} de ${d.fecha.getFullYear()}`,
+      x: 40, y: 711.1, tamano: 10, ancho: 300,
+    },
+    { imagen: (d) => d.firma, x: 31, y: 737.8, ancho: 126.8, alto: 48.7, centrado: true },
+  ],
+};
+
 // Los botones de los dos estadios van siempre los primeros: son documentos de sitios concretos
 // (los campos de fútbol) y se piden mucho. Los demás, por orden alfabético, para encontrarlos de
 // un vistazo sin tener que leerlos todos.

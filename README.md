@@ -37,7 +37,11 @@ diez días en una carpeta compartida por toda la oficina (ver *Los ITA* más aba
 6. **TA2 del trabajador** descarga el informe de situación de alta relleno con su nombre,
    fecha de nacimiento, NAF y DNI/NIE, y con la fecha de efectos del día. Las casillas de la
    codificación informática se entregan en blanco: sin ellas el documento no es válido.
-7. Debajo del nombre se ven el **DNI/NIE y el NAF** del trabajador (el NAF con los dos dígitos
+7. **EPIs antiguos**, al lado del TA2, descarga el modelo viejo del registro de entrega de
+   equipos de protección individual, por si una empresa usuaria no acepta el nuevo. Antes de
+   descargarlo sale una pantallita para marcar, equipo por equipo, si no se usa, si lo aporta la
+   empresa usuaria o si lo aporta el trabajador; viene marcada como viene el impreso de siempre.
+8. Debajo del nombre se ven el **DNI/NIE y el NAF** del trabajador (el NAF con los dos dígitos
    de la provincia separados, "28 1548815306"), para tenerlos a mano al entrar en la Seguridad
    Social.
 
@@ -76,10 +80,14 @@ Quitar un ITA de la carpeta compartida solo pueden los correos de `CORREOS_ADMIN
    dónde va cada dato (en puntos desde arriba a la izquierda, con la "y" en la línea base del texto, y el
    ancho del hueco para que el texto se encoja si no cabe).
 
-Ahora mismo hay trece: REAL MADRID, ATLETI, CEPSA, CUN MADRID, IESE MADRID, MERCK TRES CANTOS,
-MONTESA HONDA, PHARMAMAR, PLASTIPAK, SANDOZ, TALGO, TELEFONICA y THALES. Tres de ellos descargan
-dos documentos: SANDOZ (RECIBI e INFO), CEPSA (ANEXO 12 y ANEXO 24) y TALGO (REGISTRO DE MEDIO
-AMBIENTE y ACUSE RECIBO).
+Ahora mismo hay catorce: REAL MADRID, ATLETI, CEPSA, CUN MADRID, IESE MADRID, MACADAMIA,
+MERCK TRES CANTOS, MONTESA HONDA, PHARMAMAR, PLASTIPAK, SANDOZ, TALGO, TELEFONICA y THALES. Tres
+de ellos descargan dos documentos: SANDOZ (RECIBI e INFO), CEPSA (ANEXO 12 y ANEXO 24) y TALGO
+(REGISTRO DE MEDIO AMBIENTE y ACUSE RECIBO).
+
+**MACADAMIA no es un impreso de huecos**, sino una carta escrita en Word con el nombre y el DNI
+metidos en medio de una frase justificada. Por eso su ficha no lleva `campos` sino `rellenar`, que
+apunta a `js/macadamia.js`: ese módulo recompone el párrafo entero, igual que se hace con el TA2.
 
 **El orden de los botones** no es el de la lista: lo decide `ordenados()` en `js/especiales.js`.
 REAL MADRID y ATLETI van siempre los primeros, porque son de sitios concretos y se piden mucho, y
@@ -142,6 +150,9 @@ Qué hace cada archivo de `js/`:
 - `especiales.js`: los documentos de plataformas.
 - `itas.js`: leer un ITA, guardarlo (en la carpeta compartida o en el navegador) y buscar en ellos.
 - `ta2.js`: rellenar el TA2 con los datos del trabajador y la fecha del día.
+- `macadamia.js`: rellenar el documento de MACADAMIA, cuyo dato va dentro de una frase.
+- `parrafo.js`: repartir un texto en líneas justificadas y dibujarlo con las letras del propio
+  PDF. Lo usan el TA2 y MACADAMIA, que son los dos documentos que recomponen un párrafo.
 
 Y fuera de `js/`:
 

@@ -1,7 +1,7 @@
 // © 2026 Adrián Barroso de Cabo.
 // Interfaz: cargar el documento laboral (y, si hace falta, la firma y el sello), previsualizar y descargar.
 
-import { documentosDe, generar, ordenados } from "./especiales.js";
+import { COLUMNAS_EPI, EPIS, EPIS_ANTIGUOS, documentosDe, generar, ordenados } from "./especiales.js";
 import { fechaDeHoy } from "./fecha.js";
 import * as firmas from "./firma.js";
 import { abrirCacheado, calentar, ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
@@ -135,6 +135,7 @@ async function procesarDocumento({ mantenerVista = false } = {}) {
   await mostrarPrevias();
   $("btn-descargar").disabled = false;
   $("btn-ta2").disabled = false;
+  $("btn-epis").disabled = false;
   ponerEstado(TEXTOS.listo);
   buscarEnITAs(resultado.dni).catch(() => {}); // no debe estorbar si falla el almacén
   await avisarFecha();
@@ -153,6 +154,7 @@ function limpiar() {
   $("especiales").hidden = true;
   $("btn-descargar").disabled = true;
   $("btn-ta2").disabled = true;
+  $("btn-epis").disabled = true;
   estado.enITA = null;
   $("identificacion").textContent = "";
   $("fila-ita").hidden = true;
@@ -522,12 +524,74 @@ async function partesDelNombre() {
   return { nombre: partes[0] ?? "", apellidos: partes.slice(1).join(" ") };
 }
 
+/**
+ * La pantallita de los EPI, que sale antes de generar el registro antiguo: una fila por equipo y
+ * tres columnas para marcar quién lo aporta. Sale marcada tal y como viene el impreso de siempre
+ * (las botas las pone la empresa usuaria y el resto está en NO uso), así que casi siempre basta
+ * con cambiar dos o tres casillas. Devuelve lo marcado, o null si se cancela.
+ */
+function preguntarEpis() {
+  const ventana = $("dialogo-epis");
+  const cuerpo = $("filas-epis");
+  cuerpo.replaceChildren();
+  for (const epi of EPIS) {
+    const fila = document.createElement("tr");
+    const nombre = document.createElement("td");
+    nombre.textContent = epi.nombre;
+    // La fila de "Otros" lleva además un hueco para escribir de qué equipo se trata.
+    if (epi.id === "otros") {
+      const texto = document.createElement("input");
+      texto.type = "text";
+      texto.id = "epis-otros";
+      texto.className = "otros";
+      texto.placeholder = "¿Cuál? (delantal, rodilleras…)";
+      texto.setAttribute("aria-label", "Otros equipos de protección");
+      nombre.append(texto);
+    }
+    fila.append(nombre);
+    for (const columna of COLUMNAS_EPI) {
+      const casilla = document.createElement("td");
+      const opcion = document.createElement("input");
+      opcion.type = "radio";
+      opcion.name = `epi-${epi.id}`;
+      opcion.value = columna.id;
+      opcion.checked = columna.id === epi.marca;
+      opcion.setAttribute("aria-label", `${epi.nombre}: ${columna.titulo}`);
+      casilla.append(opcion);
+      fila.append(casilla);
+    }
+    cuerpo.append(fila);
+  }
+
+  return new Promise((entregar) => {
+    const cerrar = (valor) => {
+      ventana.close();
+      entregar(valor);
+    };
+    $("epis-aceptar").onclick = () => cerrar({
+      // Lo que no esté marcado se va a NO uso, que es como se rellenaba a mano.
+      epis: Object.fromEntries(EPIS.map((epi) => [epi.id, cuerpo.querySelector(`input[name="epi-${epi.id}"]:checked`)?.value ?? "no-uso"])),
+      otrosEpi: $("epis-otros").value.trim(),
+    });
+    $("epis-cancelar").onclick = () => cerrar(null);
+    ventana.onclose = () => entregar(null); // por si se cierra con la tecla de escape
+    ventana.showModal();
+  });
+}
+
 async function descargarEspecial(especial) {
   const { resultado } = estado;
   if (!resultado) return;
+  // Algunos documentos preguntan algo antes de generarse (de momento, los EPI).
+  let respuesta = {};
+  if (especial.pregunta === "epis") {
+    respuesta = await preguntarEpis();
+    if (!respuesta) return; // ha cancelado
+  }
   ponerEstado(`Preparando ${especial.boton}…`);
   await pausa();
   const datos = {
+    ...respuesta,
     trabajador: resultado.trabajador,
     dni: resultado.dni,
     puesto: resultado.puesto,
@@ -916,6 +980,7 @@ function iniciar() {
   $("con-sello").addEventListener("change", enOrden(cambiarSello));
   $("btn-descargar").addEventListener("click", enOrden(descargarTodo));
   $("btn-ta2").addEventListener("click", enOrden(descargarTA2));
+  $("btn-epis").addEventListener("click", enOrden(() => descargarEspecial(EPIS_ANTIGUOS)));
   $("btn-ita").addEventListener("click", enOrden(descargarITA));
   $("btn-itas").addEventListener("click", enOrden(abrirITAs));
   $("anadir-ita").addEventListener("click", () => $("input-ita").click());

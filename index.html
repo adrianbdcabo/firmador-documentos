@@ -86,6 +86,7 @@
         <button type="button" role="radio" data-modo="pack" aria-checked="false">Pack único (3 hojas)</button>
       </div>
       <div class="derecha">
+        <button type="button" id="btn-epis" class="boton secundario" disabled title="Descargar el registro de entrega de EPI del modelo antiguo, por si la empresa usuaria no acepta el nuevo">EPIs antiguos</button>
         <button type="button" id="btn-ta2" class="boton secundario" disabled title="Descargar el informe de situación de alta (TA2) relleno con los datos del trabajador">TA2 del trabajador</button>
         <button type="button" id="btn-descargar" class="boton principal" disabled>Descargar</button>
       </div>
@@ -146,6 +147,31 @@
     </div>
     <div class="dialogo-botones">
       <button type="button" id="cerrar-privacidad" class="boton principal">Cerrar</button>
+    </div>
+  </dialog>
+
+  <dialog id="dialogo-epis">
+    <h3>Equipos de protección entregados</h3>
+    <p class="pequeno suave">
+      Marca lo que tiene que salir en el documento. Viene marcado como viene el impreso de siempre;
+      lo que dejes sin marcar saldrá en NO USO.
+    </p>
+    <div class="tabla-epis">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Medio de protección / E.P.I.</th>
+            <th scope="col">NO uso</th>
+            <th scope="col">Aporta empresa usuaria</th>
+            <th scope="col">Aporta trabajador</th>
+          </tr>
+        </thead>
+        <tbody id="filas-epis"></tbody>
+      </table>
+    </div>
+    <div class="dialogo-botones">
+      <button type="button" id="epis-cancelar" class="boton secundario">Cancelar</button>
+      <button type="button" id="epis-aceptar" class="boton principal">Descargar</button>
     </div>
   </dialog>
 

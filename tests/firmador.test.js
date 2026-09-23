@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
 
-import { documentosDe, ESPECIALES, generar, ordenados } from "../js/especiales.js";
+import { documentosDe, EPIS, EPIS_ANTIGUOS, ESPECIALES, generar, ordenados } from "../js/especiales.js";
 import { fechaDeHoy } from "../js/fecha.js";
 import { deHojaSuelta, desdeImagen, desdePdf } from "../js/firma.js";
 import { decodificar, png, pngParaPdf } from "../js/imagenes.js";
@@ -436,6 +436,50 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       assert.ok(Math.abs(izquierda - 72) < 0.5, `línea ${i + 1}: empieza en ${izquierda.toFixed(1)} y no en el margen`);
       if (i < renglones.length - 1) assert.ok(Math.abs(derecha - 523.5) < 1, `línea ${i + 1}: acaba en ${derecha.toFixed(1)} y no en el margen`);
     });
+  });
+
+  test("EPIs antiguos: cada X cae en la columna que se ha marcado", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = {
+      trabajador: resultado.trabajador,
+      nombre: "IGNACIO CARLOS",
+      apellidos: "PUCHOL VIÑA",
+      dni: resultado.dni,
+      puesto: "AUXILIAR DE COLECTIVIDADES",
+      firma: resultado.firma,
+      fecha: new Date(2026, 8, 23),
+      // Lo que no se diga se va a NO uso: aquí solo se marcan tres.
+      epis: { botas: "empresa", gafas: "trabajador", otros: "empresa" },
+      otrosEpi: "Delantal",
+    };
+    assert.equal(EPIS_ANTIGUOS.archivo(datos), `EPIS - ${resultado.trabajador}.pdf`);
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${EPIS_ANTIGUOS.plantilla}`, import.meta.url)));
+
+    // La plantilla se publica en la web: no puede llevar los datos de la trabajadora del ejemplo.
+    const vacia = (await texto(plantilla)).replace(/\s+/g, " ");
+    assert.ok(!/JENIFFER|JAIMES|Y9943033D|\d{2}\/\d{2}\/\d{4}/.test(vacia), "la plantilla va sin datos");
+
+    const pdf = await generar(EPIS_ANTIGUOS, plantilla, datos);
+    const contenido = (await texto(pdf)).replace(/\s+/g, " ");
+    for (const esperado of ["IGNACIO CARLOS", "PUCHOL VIÑA", resultado.dni, "ASL", "Delantal", "En MADRID a 23 de SEPTIEMBRE de 2026"]) {
+      assert.ok(contenido.includes(esperado), `falta "${esperado}"`);
+    }
+    assert.equal(contenido.split("23/09/2026").length - 1, 10, "las diez fechas de la tabla");
+    assert.ok(await llevaImagen(pdf, datos.firma, 0), "lleva la firma del trabajador");
+
+    // Y ahora lo importante: que cada X esté en la columna que se marcó.
+    const columnas = { "no-uso": [327.1, 355.1], empresa: [355.6, 411.8], trabajador: [412.3, 511.2] };
+    const marcas = (await lineas(pdf))
+      .filter((l) => l.chars.map((c) => c.c).join("").trim() === "X")
+      .map((l) => l.chars.find((ch) => ch.glifo).glifo.origen);
+    assert.equal(marcas.length, EPIS.length, "una X por cada fila de la tabla");
+    for (const epi of EPIS) {
+      const esperada = datos.epis[epi.id] ?? "no-uso";
+      const suya = marcas.find(([, y]) => y > epi.fila[0] && y < epi.fila[1] + 4);
+      assert.ok(suya, `${epi.id}: no hay X en su fila`);
+      const [x0, x1] = columnas[esperada];
+      assert.ok(suya[0] > x0 && suya[0] < x1, `${epi.id}: la X cae en ${suya[0].toFixed(1)}, fuera de ${esperada}`);
+    }
   });
 
   test("la firma y el sello no se salen de su casilla", async () => {
