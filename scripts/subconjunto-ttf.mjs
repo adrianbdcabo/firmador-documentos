@@ -1,6 +1,6 @@
 // © 2026 Adrián Barroso de Cabo.
 // Coge una fuente TrueType entera y devuelve otra con los dibujos de solo las letras que se le
-// pidan. Se usa al preparar la plantilla de MACADAMIA (scripts/plantilla-macadamia.mjs).
+// pidan. Se usa al preparar las plantillas de MACADAMIA y CALIER (scripts/completar-fuentes.mjs).
 //
 // POR QUÉ HACE FALTA
 // Word, al guardar un PDF, mete la fuente entera pero le borra los dibujos de las letras que el

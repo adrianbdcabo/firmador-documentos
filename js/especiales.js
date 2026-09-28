@@ -27,6 +27,7 @@
 // escribe todo del mismo tamaño y en negro: queda más limpio y más uniforme.
 
 import { fechaDeHoy, MESES } from "./fecha.js";
+import { generarCalier } from "./calier.js";
 import { generarMacadamia } from "./macadamia.js";
 import { StandardFonts } from "../vendor/pdf-lib/pdf-lib.esm.min.js";
 import { PDFDocument, aPdf, anadirContenido, anadirRecurso, escaparWinAnsi, guardar, incrustarImagen, invertir, multiplicar, numero, transformacion, winAnsi } from "./pdfbase.js";
@@ -355,6 +356,49 @@ export const ESPECIALES = [
     archivo: (datos) => `DOCU ESPECIAL MACADAMIA - ${datos.trabajador}.pdf`,
     rellenar: generarMacadamia,
   },
+  {
+    // El acuse de recibo de la normativa de salud, prevención, medio ambiente e higiene del Grupo
+    // Indukern, para los Laboratorios Calier. Como MACADAMIA, es una carta de Word: el nombre y la
+    // empresa van en medio de la frase "El trabajador ……… de la empresa ………", así que esa frase
+    // (y la fecha de "Firma y fecha:") la recompone js/calier.js. Lo demás son huecos normales.
+    id: "calier",
+    boton: "CALIER",
+    plantilla: "plantillas/calier.pdf",
+    archivo: (datos) => `DOCU ESPECIAL CALIER - ${datos.trabajador}.pdf`,
+    rellenar: generarCalier,
+    pagina: 0,
+    campos: [
+      // La X de la casilla de LES FRANQUESES, en la fila de CALIER, que es donde está el laboratorio
+      { valor: () => "X", x: 187.4, y: 331, tamano: 9, ancho: 8, centrado: true },
+      // La firma, debajo de "Firma y fecha:"
+      { imagen: (d) => d.firma, x: 56.5, y: 510, ancho: 120, alto: 45 },
+    ],
+  },
+  {
+    // Certificado de recepción de documentación del servicio de prevención mancomunado de Sanitas.
+    // Los huecos son rayas bajas de la letra del documento (Calibri de 16): cada dato va centrado
+    // en el suyo y un poco por encima de la línea base, para que la raya quede debajo del texto.
+    id: "sanitas",
+    boton: "SANITAS",
+    plantilla: "plantillas/sanitas.pdf",
+    archivo: (datos) => `DOCU ESPECIAL SANITAS - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      // "Don/Doña ______" (148,1→538,6), "con DNI ______," (153,3→312,8) y "______ certifica" (69,5→332,3)
+      { valor: (d) => d.trabajador, x: 343.4, y: 176.2, tamano: 12, ancho: 386, centrado: true },
+      { valor: (d) => d.dni, x: 233, y: 205.5, tamano: 12, ancho: 155, centrado: true },
+      { valor: () => "TEMPS MULTIWORK ETT S.L.", x: 200.9, y: 234.8, tamano: 12, ancho: 258, centrado: true },
+      // "…el presente certificado en ______ (427,1→538,6) a ____ (80,8→144,4) de ____ (164,4→236) de ____ (256→288)"
+      { valor: () => LUGAR, x: 482.9, y: 544.7, tamano: 12, ancho: 108, centrado: true },
+      { valor: (d) => String(d.fecha.getDate()), x: 112.6, y: 574, tamano: 12, ancho: 60, centrado: true },
+      { valor: (d) => MESES[d.fecha.getMonth()].toUpperCase(), x: 200.2, y: 574, tamano: 12, ancho: 68, centrado: true },
+      { valor: (d) => String(d.fecha.getFullYear()), x: 272, y: 574, tamano: 12, ancho: 31, centrado: true },
+      // "Fdo. Don/Doña ______" (347,2→538,4): el nombre con el DNI detrás, como en el de ejemplo,
+      // y la firma debajo, centrada bajo la raya.
+      { valor: (d) => `${d.trabajador} ${d.dni}`, x: 442.8, y: 707.3, tamano: 12, ancho: 190, centrado: true },
+      { imagen: (d) => d.firma, x: 347.2, y: 722, ancho: 191, alto: 55, centrado: true },
+    ],
+  },
 ];
 
 // ------------------------------------------------------------------ registro de EPI antiguo
@@ -451,8 +495,14 @@ export function documentosDe(especial) {
 
 /** PDF de un documento especial relleno con los datos del trabajador. */
 export async function generar(especial, plantilla, datos) {
-  // Los documentos que no son impresos de huecos traen su propio relleno (de momento, MACADAMIA).
-  if (especial.rellenar) return especial.rellenar(plantilla, datos);
+  // Los documentos que no son impresos de huecos traen su propio relleno (MACADAMIA y CALIER), que
+  // recompone la frase donde va el dato. Si además tienen huecos normales (la X y la firma de
+  // CALIER), esos se ponen después, encima del documento ya recompuesto.
+  if (especial.rellenar) {
+    const recompuesto = await especial.rellenar(plantilla, datos);
+    if (!especial.campos) return recompuesto;
+    plantilla = recompuesto;
+  }
 
   const doc = await PDFDocument.load(plantilla, { updateMetadata: false });
   const indice = especial.pagina < 0 ? doc.getPageCount() + especial.pagina : especial.pagina;

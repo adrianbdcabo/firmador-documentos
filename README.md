@@ -80,14 +80,23 @@ Quitar un ITA de la carpeta compartida solo pueden los correos de `CORREOS_ADMIN
    dónde va cada dato (en puntos desde arriba a la izquierda, con la "y" en la línea base del texto, y el
    ancho del hueco para que el texto se encoja si no cabe).
 
-Ahora mismo hay catorce: REAL MADRID, ATLETI, CEPSA, CUN MADRID, IESE MADRID, MACADAMIA,
-MERCK TRES CANTOS, MONTESA HONDA, PHARMAMAR, PLASTIPAK, SANDOZ, TALGO, TELEFONICA y THALES. Tres
+Ahora mismo hay dieciséis: REAL MADRID, ATLETI, CALIER, CEPSA, CUN MADRID, IESE MADRID, MACADAMIA,
+MERCK TRES CANTOS, MONTESA HONDA, PHARMAMAR, PLASTIPAK, SANDOZ, SANITAS, TALGO, TELEFONICA y THALES. Tres
 de ellos descargan dos documentos: SANDOZ (RECIBI e INFO), CEPSA (ANEXO 12 y ANEXO 24) y TALGO
 (REGISTRO DE MEDIO AMBIENTE y ACUSE RECIBO).
 
 **MACADAMIA no es un impreso de huecos**, sino una carta escrita en Word con el nombre y el DNI
 metidos en medio de una frase justificada. Por eso su ficha no lleva `campos` sino `rellenar`, que
 apunta a `js/macadamia.js`: ese módulo recompone el párrafo entero, igual que se hace con el TA2.
+
+**CALIER** (Laboratorios Calier, del Grupo Indukern) es otra carta de Word: el nombre y la empresa
+van en la frase "El trabajador ……… de la empresa ………". Su `rellenar` apunta a `js/calier.js`, que
+cambia los puntos por los datos y recompone la frase con la Calibri del documento (con un nombre muy
+largo pasa a dos renglones), y pone la fecha detrás de "Firma y fecha:". Su ficha lleva además
+`campos` para lo que sí son huecos normales: la X de la casilla de LES FRANQUESES y la firma. Las
+plantillas de estas dos cartas se preparan con `scripts/plantilla-macadamia.mjs` y
+`scripts/plantilla-calier.mjs`, que les ponen la Calibri completa: Word guarda la fuente sin los
+dibujos de las letras que no usa, y cualquier nombre saldría con letras que faltan.
 
 **El orden de los botones** no es el de la lista: lo decide `ordenados()` en `js/especiales.js`.
 REAL MADRID y ATLETI van siempre los primeros, porque son de sitios concretos y se piden mucho, y
@@ -151,8 +160,9 @@ Qué hace cada archivo de `js/`:
 - `itas.js`: leer un ITA, guardarlo (en la carpeta compartida o en el navegador) y buscar en ellos.
 - `ta2.js`: rellenar el TA2 con los datos del trabajador y la fecha del día.
 - `macadamia.js`: rellenar el documento de MACADAMIA, cuyo dato va dentro de una frase.
+- `calier.js`: rellenar el documento de CALIER, cuyo nombre y empresa también van dentro de una frase.
 - `parrafo.js`: repartir un texto en líneas justificadas y dibujarlo con las letras del propio
-  PDF. Lo usan el TA2 y MACADAMIA, que son los dos documentos que recomponen un párrafo.
+  PDF. Lo usan el TA2, MACADAMIA y CALIER, que son los documentos que recomponen un párrafo.
 
 Y fuera de `js/`:
 

@@ -438,6 +438,57 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     });
   });
 
+  test("CALIER: el nombre y la empresa van dentro de la frase, con la Calibri del documento", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, firma: resultado.firma, fecha: new Date(2026, 8, 28) };
+    const especial = ESPECIALES.find((e) => e.id === "calier");
+    assert.equal(especial.archivo(datos), `DOCU ESPECIAL CALIER - ${resultado.trabajador}.pdf`);
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
+
+    const pdf = await generar(especial, plantilla, datos);
+    const todas = await lineas(pdf);
+    const frase = todas.find((l) => l.chars.map((c) => c.c).join("").includes("El trabajador"));
+    const textoFrase = frase.chars.map((c) => c.c).join("").replace(/\s+/g, " ").trim();
+    assert.equal(textoFrase, `El trabajador ${resultado.trabajador} de la empresa TEMPS MULTIWORK ETT S.L.`);
+    // Todas las letras de la frase, también la Ñ de VIÑA, salen con la Calibri de la plantilla
+    for (const ch of frase.chars.filter((c) => c.glifo && c.c.trim())) assert.match(ch.fuente, /Calibri$/, `"${ch.c}" sale con ${ch.fuente}`);
+
+    const contenido = (await texto(pdf)).replace(/\s+/g, " ");
+    // La fecha va en el renglón de "Firma y fecha:", justo detrás de los dos puntos
+    const renglonFecha = todas.find((l) => l.chars.map((c) => c.c).join("").includes("Firma y fecha:"));
+    const laFecha = todas.find((l) => l.chars.map((c) => c.c).join("").trim() === "28/09/2026");
+    assert.ok(laFecha, "sale la fecha del día");
+    assert.ok(Math.abs(laFecha.bbox[1] - renglonFecha.bbox[1]) < 1 && laFecha.bbox[0] > renglonFecha.bbox[0], "detrás de «Firma y fecha:»");
+    assert.ok(!/……|\.\.\.\./.test(contenido), "no quedan puntos de los huecos");
+    assert.ok(await llevaImagen(pdf, datos.firma), "lleva la firma");
+    // La X de LES FRANQUESES, dentro de su casilla (183,4→194,4)
+    const x = todas.flatMap((l) => l.chars).find((c) => c.c === "X" && c.glifo && Math.abs(c.glifo.origen[1] - 331) < 1);
+    assert.ok(x && x.glifo.origen[0] > 183.4 && x.glifo.origen[0] < 190, "la X va en la casilla de LES FRANQUESES");
+
+    // Con un nombre larguísimo la frase pasa a dos renglones, sin salirse del margen derecho
+    const largo = await generar(especial, plantilla, { ...datos, trabajador: "MARIA DEL CARMEN FERNANDEZ DE LA HOZ ECHEVARRIA GUTIERREZ DE LOS SANTOS" });
+    const renglones = (await lineas(largo)).filter((l) => /El trabajador|TEMPS MULTIWORK/.test(l.chars.map((c) => c.c).join("")));
+    assert.equal(renglones.length, 2, "la frase ocupa dos renglones");
+    assert.ok(renglones[1].bbox[3] < 261, "el segundo renglón no pisa el de «recibe de su empresa…»");
+    for (const r of renglones) assert.ok(r.bbox[2] <= 542, `acaba en ${r.bbox[2].toFixed(1)}`);
+    assert.ok((await texto(largo)).replace(/\s+/g, " ").includes("GUTIERREZ DE LOS SANTOS de la empresa TEMPS MULTIWORK ETT S.L."));
+  });
+
+  test("SANITAS: nombre, DNI, empresa, lugar, fecha y firma en sus rayas", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, firma: resultado.firma, fecha: new Date(2026, 8, 28) };
+    const especial = ESPECIALES.find((e) => e.id === "sanitas");
+    assert.equal(especial.archivo(datos), `DOCU ESPECIAL SANITAS - ${resultado.trabajador}.pdf`);
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
+    const pdf = await generar(especial, plantilla, datos);
+    const contenido = (await texto(pdf)).replace(/\s+/g, " ");
+    for (const esperado of [resultado.trabajador, resultado.dni, "TEMPS MULTIWORK ETT S.L.", "MADRID", "28", "SEPTIEMBRE", "2026"]) {
+      assert.ok(contenido.includes(esperado), `falta "${esperado}"`);
+    }
+    assert.equal(contenido.split(resultado.dni).length - 1, 2, "el DNI sale arriba y en el «Fdo.»");
+    assert.ok(await llevaImagen(pdf, datos.firma), "lleva la firma");
+  });
+
   test("EPIs antiguos: cada X cae en la columna que se ha marcado", async () => {
     const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
     const datos = {

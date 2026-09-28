@@ -3,9 +3,9 @@
 //
 // Estas funciones son las que hacen que un texto cambiado a mano no se note: miden cada letra con
 // la fuente que ya trae el PDF, reparten las palabras en líneas justificadas y las dibujan
-// pidiéndole a esa misma fuente sus glifos. Las usan tanto el TA2 de la Seguridad Social
-// (js/ta2.js) como el documento de MACADAMIA (js/macadamia.js), que son los dos impresos en los
-// que el dato va metido en medio de una frase y no en un hueco de puntitos.
+// pidiéndole a esa misma fuente sus glifos. Las usan el TA2 de la Seguridad Social (js/ta2.js) y
+// los documentos de MACADAMIA (js/macadamia.js) y CALIER (js/calier.js), que son los impresos en
+// los que el dato va metido en medio de una frase y no en un hueco libre de la página.
 //
 // Un "char" es una letra leída de la página: su carácter (c), la fuente y el tamaño con que está
 // escrita, su color, si va en negrita y, si venía del documento, el glifo original con su posición.
