@@ -489,6 +489,27 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     assert.ok(await llevaImagen(pdf, datos.firma), "lleva la firma");
   });
 
+  test("WURTH y AMADEUS: nombre, DNI, fecha del día y firma en sus casillas", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, firma: resultado.firma, fecha: new Date(2026, 8, 28) };
+    // [id, nombre del archivo, textos que tienen que salir, veces que sale la fecha, ¿lleva firma?]
+    const casos = [
+      ["wurth", `DOCU ESPECIAL WURTH - ${resultado.trabajador}.pdf`, [resultado.trabajador, resultado.dni], 1, true],
+      // En AMADEUS firma la empresa, que ya viene en la plantilla: del trabajador solo va el nombre
+      ["amadeus", `CAE AMADEUS - ${resultado.trabajador}.pdf`, [resultado.trabajador, "02260608F"], 3, false],
+    ];
+    for (const [id, archivo, esperados, fechas, conFirma] of casos) {
+      const especial = ESPECIALES.find((e) => e.id === id);
+      assert.equal(especial.archivo(datos), archivo);
+      const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
+      const pdf = await generar(especial, plantilla, datos);
+      const contenido = (await texto(pdf)).replace(/\s+/g, " ");
+      for (const esperado of esperados) assert.ok(contenido.includes(esperado), `${archivo}: falta "${esperado}"`);
+      assert.equal(contenido.split("28/09/2026").length - 1, fechas, `${archivo}: la fecha del día sale ${fechas} vez/veces`);
+      assert.equal(await llevaImagen(pdf, datos.firma), conFirma, `${archivo}: ${conFirma ? "lleva" : "no lleva"} la firma`);
+    }
+  });
+
   test("EPIs antiguos: cada X cae en la columna que se ha marcado", async () => {
     const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
     const datos = {

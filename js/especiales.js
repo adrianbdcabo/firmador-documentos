@@ -399,6 +399,45 @@ export const ESPECIALES = [
       { imagen: (d) => d.firma, x: 347.2, y: 722, ancho: 191, alto: 55, centrado: true },
     ],
   },
+  {
+    // Entrega de información de PRL y medio ambiente de Würth. La plantilla es un escaneo (una sola
+    // imagen, sin texto), y trae ya puestas la X de "Central Palau" y la empresa, TEMPS MULTIWORK.
+    // Solo queda la primera fila de la tabla (nombre, DNI y firma) y la fecha.
+    id: "wurth",
+    boton: "WURTH",
+    plantilla: "plantillas/wurth.pdf",
+    archivo: (datos) => `DOCU ESPECIAL WURTH - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      // Primera fila de "Nombre y DNI" (147,8 | 421,5 | 542; la fila va de 524,5 a 549,5): el
+      // nombre a la izquierda y el DNI al final de la casilla, como en el de ejemplo
+      { valor: (d) => d.trabajador, x: 153, y: 540.5, tamano: 10, ancho: 190 },
+      { valor: (d) => d.dni, x: 381, y: 540.5, tamano: 10, ancho: 72, centrado: true },
+      { imagen: (d) => d.firma, x: 423.5, y: 525.5, ancho: 117, alto: 23.5, centrado: true },
+      // La casilla blanca de "FECHA" (108,8→201,8; de 700 a 727,5)
+      { valor: (d) => fechaCorta(d.fecha), x: 155.3, y: 717.5, tamano: 11, ancho: 86, centrado: true },
+    ],
+  },
+  {
+    // Declaración de coordinación de actividades empresariales de Amadeus. La firma la empresa: el
+    // sello, el nombre y el DNI de nuestra representante ya vienen en la plantilla. Del trabajador
+    // solo va el nombre, y la fecha del día en los tres huecos de fecha y en la casilla "Fecha:".
+    id: "amadeus",
+    boton: "AMADEUS",
+    plantilla: "plantillas/amadeus.pdf",
+    archivo: (datos) => `CAE AMADEUS - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      // "Se ha realizado, con fecha ______ , la evaluación de riesgos…" (hasta la coma, en 268)
+      { valor: (d) => fechaCorta(d.fecha), x: 207.5, y: 456.8, tamano: 12, ancho: 60 },
+      // "El trabajador D. / Dña. ______ , ha recibido:" (el hueco acaba en 437)
+      { valor: (d) => d.trabajador, x: 187.6, y: 506.9, tamano: 12, ancho: 249 },
+      // "El apto médico (…) en fecha ______." (hasta el punto, en 531)
+      { valor: (d) => fechaCorta(d.fecha), x: 455.3, y: 583, tamano: 12, ancho: 74 },
+      // La casilla "Fecha:" de la tabla de abajo (308 | 393)
+      { valor: (d) => fechaCorta(d.fecha), x: 310.8, y: 655.5, tamano: 12, ancho: 80 },
+    ],
+  },
 ];
 
 // ------------------------------------------------------------------ registro de EPI antiguo
