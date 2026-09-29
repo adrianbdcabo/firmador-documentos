@@ -2,6 +2,7 @@
 // Lógica principal: localiza las hojas, captura la firma digital y pega firma y sello.
 
 import * as config from "./config.js";
+import { episDelPuesto, faltanEpis, ponerEpis } from "./epis.js";
 import { FechaNoCambiada, leerHoja, ponerFechaEnPagina, recorrerTexto } from "./fecha.js";
 import { cajaConTinta, decodificar, png, pngParaPdf, recortar } from "./imagenes.js";
 import { interpretar, lineasDeGlifos, matrizDeAspecto, textoDeLineas } from "./lector.js";
@@ -56,6 +57,7 @@ export class Resultado {
     this.firma = firma; // PNG de la firma que se ha pegado en las hojas
     this.fecha = null; // null: la fecha original del documento
     this.avisos = [];
+    this.epis = null; // "añadidos" o "desconocido": la hoja de EPI venía sin tabla
     this.leidas = null; // lo leído de cada hoja para cambiarle la fecha (se lee la primera vez)
   }
 
@@ -139,15 +141,25 @@ export async function procesar(datos, { fecha = null, imagenFirma = null, sello 
   const tamanoFirma = await tamanoDeImagen(firma);
   const tamanoSello = sello ? await tamanoDeImagen(sello) : null;
   let trabajador = "";
-  const sitios = config.HOJAS.map((hoja, i) => {
+  const puesto = puestoDelTexto(textoHojas);
+  let epis = null; // "añadidos" o "desconocido" si la hoja de EPI venía sin tabla
+  const sitios = [];
+  for (const [i, hoja] of config.HOJAS.entries()) {
     const pagina = conjunto.addPage(copias[i]);
-    const lineas = lineasDe[hoja.clave];
+    let lineas = lineasDe[hoja.clave];
+    if (hoja.clave === "EPI" && faltanEpis(lineas)) {
+      const lista = episDelPuesto(puesto);
+      if (lista) {
+        lineas = await ponerEpis(conjunto, pagina, lista);
+        epis = "añadidos";
+      } else epis = "desconocido";
+    }
     const ancla = buscarAncla(conjunto, pagina, hoja.ladoAncla, lineas);
     if (hoja.clave === config.HOJA_NOMBRE) trabajador = nombreTrabajador(conjunto, pagina, ancla, lineas);
     const suyos = [sitioDeImagen(conjunto, pagina, tamanoFirma, hoja.firma, config.CAJA_FIRMA, ancla)];
     if (hoja.sello && tamanoSello) suyos.push({ ...sitioDeImagen(conjunto, pagina, tamanoSello, hoja.sello, config.CAJA_SELLO, ancla), esSello: true });
-    return suyos;
-  });
+    sitios.push(suyos);
+  }
   const desnudoOriginal = await guardar(conjunto);
 
   const hojas = config.HOJAS.map((hoja) => ({
@@ -164,11 +176,12 @@ export async function procesar(datos, { fecha = null, imagenFirma = null, sello 
     hojas,
     glifos,
     dniDelTexto(textoHojas),
-    puestoDelTexto(textoHojas),
+    puesto,
     firma,
     sello,
     sitios,
   );
+  resultado.epis = epis;
   await resultado.ponerFecha(fecha);
   if (!fecha) await resultado.originales(); // sin fecha, lo que hay ya es el original
   return resultado;

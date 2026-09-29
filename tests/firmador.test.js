@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
 
+import { episDelPuesto } from "../js/epis.js";
 import { documentosDe, EPIS, EPIS_ANTIGUOS, ESPECIALES, generar, ordenados } from "../js/especiales.js";
 import { fechaDeHoy } from "../js/fecha.js";
 import { deHojaSuelta, desdeImagen, desdePdf } from "../js/firma.js";
@@ -37,7 +38,7 @@ const ITA = "ita_1809_260920_215821.pdf";
 // Esquina superior izquierda de las imágenes pegadas a mano en INFO/EPI/REN HECHA.
 const ESPERADO = {
   INFO: [[41.0, 661.6], [325.5, 610.1]],
-  EPI: [[368.4, 608.6]],
+  EPI: [[368.4, 608.6 + 72]], // 72 pt más abajo: a este documento se le añaden los 5 EPI de auxiliar
   REN: [[42.1, 742.1], [349.9, 659.9]],
 };
 
@@ -121,8 +122,10 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     const datos = leer(DOCS.Y6912244E.archivo);
     const resultado = await procesar(datos, { sello: SELLO });
     for (const hoja of resultado.hojas) {
-      const antes = new Set((await imagenes(datos, hoja.paginaOrigen - 1)).map((im) => im.bbox.map(Math.round).join()));
-      const nuevas = (await imagenes(hoja.pdf)).filter((im) => !antes.has(im.bbox.map(Math.round).join()));
+      // En EPI el documento trae la hoja sin tabla: se le añade y sus imágenes bajan, así que solo se compara la x
+      const clave = (im) => (hoja.clave === "EPI" ? [im.bbox[0], im.bbox[2]] : im.bbox).map(Math.round).join();
+      const antes = new Set((await imagenes(datos, hoja.paginaOrigen - 1)).map(clave));
+      const nuevas = (await imagenes(hoja.pdf)).filter((im) => !antes.has(clave(im)));
       nuevas.sort((a, b) => (a.bbox[2] - a.bbox[0]) - (b.bbox[2] - b.bbox[0])); // primero la firma (la más pequeña)
       assert.equal(nuevas.length, ESPERADO[hoja.clave].length, hoja.clave);
       nuevas.forEach((im, i) => {
@@ -670,6 +673,38 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     assert.equal(nafFormateado("281548815306"), "28 1548815306");
     assert.equal(nafFormateado("28 1548815306"), "28 1548815306");
     assert.equal(nafFormateado("1548815306"), "00 1548815306", "se rellena con ceros si viene corto");
+  });
+
+  test("hoja de EPI sin tabla: se añaden los EPI del puesto y lo de debajo baja", async () => {
+    const resultado = await procesar(leer(DOCS["53850518C"].archivo), { sello: SELLO });
+    assert.equal(resultado.epis, "añadidos");
+    const lineasEpi = await lineas(resultado.hojas[1].pdf);
+    const contenido = textoDeLineas(lineasEpi);
+    for (const epi of ["Entrega EPI", "0021 - Calzado de seguridad antideslizante", "1.53 - Guantes de protección contra productos químicos", "7.86 - Ropa de trabajo"]) {
+      assert.ok(contenido.includes(epi), epi);
+    }
+    const estatuto = lineasEpi.find((l) => textoDeLineas([l]).startsWith("El Estatuto"));
+    const ultimaFila = lineasEpi.find((l) => textoDeLineas([l]).startsWith("7.86"));
+    assert.ok(estatuto.chars[0].rect[1] > ultimaFila.chars[0].rect[3], "El Estatuto queda debajo de la tabla");
+    // la firma cae junto al «Fdo.» desplazado, y la fecha se puede cambiar
+    await resultado.ponerFecha(DIFICIL);
+    assert.ok((await texto(resultado.hojas[1].pdf)).includes(DIFICIL));
+    assert.equal(resultado.avisos.length, 0);
+  });
+
+  test("auxiliar de limpieza recibe los EPI de colectividades", async () => {
+    const resultado = await procesar(leer(DOCS.Y6912244E.archivo), { sello: SELLO });
+    assert.equal(resultado.epis, "añadidos");
+    assert.ok((await texto(resultado.hojas[1].pdf)).includes("Entrega EPI"));
+  });
+
+  test("EPI por puesto: los ayudantes usan los de su oficio y logístico es lo mismo que mozo", () => {
+    assert.equal(episDelPuesto("AYUDANTE DE CAMARERO/A"), episDelPuesto("CAMARERO"));
+    assert.equal(episDelPuesto("Ayudante de cocina"), episDelPuesto("COCINERO/A"));
+    assert.equal(episDelPuesto("MOZO DE ALMACÉN"), episDelPuesto("LOGÍSTICO"));
+    assert.equal(episDelPuesto("AUXILIAR DE COLECTIVIDADES"), episDelPuesto("MOZO"));
+    assert.equal(episDelPuesto("AUXILIAR DE LIMPIEZA"), episDelPuesto("MOZO"));
+    assert.equal(episDelPuesto("JARDINERO"), null);
   });
 
   test("formato de la fecha de hoy", () => {

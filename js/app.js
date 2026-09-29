@@ -272,6 +272,15 @@ function actualizarDatos() {
   if (!resultado) $("fecha").textContent = $("fecha-hoy").checked ? `Se pondrá la fecha de hoy: ${fechaDeHoy()}` : "";
   else $("fecha").textContent = resultado.fecha ? `Fecha de hoy · ${resultado.fecha}` : "Fecha original del documento";
 
+  const avisoEpis = $("aviso-epis");
+  const epis = resultado?.epis;
+  avisoEpis.hidden = !epis;
+  avisoEpis.textContent = epis === "añadidos"
+    ? `Ha sido necesario incluir los EPI en la hoja de EPI porque venía sin ellos (${resultado.puesto}).`
+    : epis === "desconocido"
+      ? `La hoja de EPI viene sin EPI y no se conocen los del puesto «${resultado.puesto}»: revísala.`
+      : "";
+
   const img = $("img-firma");
   const texto = $("texto-firma");
   if (firma) {

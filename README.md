@@ -152,6 +152,7 @@ Qué hace cada archivo de `js/`:
 - `app.js`: la interfaz (cargar, vistas previas, descargar).
 - `pdf.js`: separa las hojas, captura la firma digital y pega firma y sello.
 - `fecha.js`: cambia la fecha conservando la letra del documento.
+- `epis.js`: si la hoja de EPI llega sin tabla de equipos, la detecta, baja lo de debajo del párrafo de introducción y escribe los EPI del puesto (camarero, cocinero, auxiliar de colectividades / logístico / mozo). La pantalla avisa cuando ha sido necesario.
 - `lector.js`: lee el contenido de una página (qué letra hay en cada sitio) y permite modificarlo.
 - `fuentes.js`: las fuentes del PDF (qué letra es cada código, cuánto mide).
 - `pdfbase.js`: utilidades sobre pdf-lib (abrir, guardar, coordenadas, recursos).
