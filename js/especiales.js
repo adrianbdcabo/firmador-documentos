@@ -611,7 +611,7 @@ export const EPIS_ANTIGUOS = {
 // línea (js/maquinaria.js). Igual que el de EPI antiguos, su botón va al lado del TA2.
 export const NO_USO_MAQUINARIA = {
   id: "no-uso-maquinaria",
-  boton: "NO USO MAQUINARIA",
+  boton: "No uso maquinaria",
   plantilla: "plantillas/no-uso-maquinaria.pdf",
   archivo: (datos) => `NO USO MAQUINARIA - ${datos.trabajador}.pdf`,
   rellenar: generarMaquinaria,
