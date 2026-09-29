@@ -8,7 +8,10 @@
 // Las coordenadas son en puntos con el origen arriba a la izquierda y la "y" es la línea base del texto.
 // Cada texto puede llevar "fuente" (una de las 14 estándar de PDF; por defecto Helvetica) y
 // "centrado": true, y entonces la "x" es el centro del texto en vez de su inicio. Con "lineas": N
-// el texto se parte por palabras en hasta N líneas si no cabe en una ("interlineado", distancia entre ellas).
+// el texto se parte por palabras en hasta N líneas si no cabe en una ("interlineado", distancia entre ellas),
+// y con "centrarLineas": true, si ocupa menos, baja para quedar en el medio del hueco de N líneas.
+// Un campo puede llevar "pagina" (0 es la primera, -1 la última) para escribir en una hoja distinta
+// de la del documento: así se rellenan documentos de varias hojas de una sola vez.
 // En una imagen, "centrado": true la coloca en el medio del hueco (x, y, ancho, alto) en vez de
 // pegada a su esquina de arriba a la izquierda: es lo que hace que una firma quede dentro de la
 // casilla de una tabla sin taparle las rayas.
@@ -41,6 +44,7 @@ const fechaCorta = (fecha) => `${dosCifras(fecha.getDate())}/${dosCifras(fecha.g
 const EMPRESA = "TEMPS MULTIWORK ETT";
 const CIF = "B01130186";
 const REPRESENTANTE = "SOLEDAD FERNANDEZ";
+const REPRESENTANTE_DNI = "02260608F";
 // La empresa usuaria a la que va el trabajador. De momento es fija; si algún día hace falta que
 // cambie de un documento a otro, se puede leer de la hoja INFO del documento laboral.
 const EMPRESA_USUARIA = "EUREST SERVICIOS";
@@ -459,6 +463,59 @@ export const ESPECIALES = [
     ],
   },
   {
+    // Dos documentos de JOHN DEERE (centro de Getafe): el comunicado de requisitos ambientales y la
+    // autorización de uso de equipos, que la firma nuestra representante y por eso lleva el sello.
+    id: "john-deere",
+    boton: "JOHN DEERE",
+    documentos: [
+      {
+        plantilla: "plantillas/john-deere-comunicado.pdf",
+        archivo: (datos) => `COMUNICADO DE REQUISITOS AMBIENTALES JOHN DEERE - ${datos.trabajador}.pdf`,
+        pagina: 0,
+        campos: [
+          // Cuadro de arriba (256 | 405,5 | 531 y, en la de actividad, 148 | 328; filas de 128 a 144,4 y de ahí a 160,2)
+          { valor: () => "TEMPS MULTIWORK", x: 393.5, y: 140, tamano: 10.5, ancho: 265, centrado: true },
+          { valor: () => "HOSTELERIA Y LIMPIEZA", x: 238, y: 156, tamano: 10.5, ancho: 172, centrado: true },
+          { valor: (d) => fechaCorta(d.fecha), x: 468.2, y: 156, tamano: 10.5, ancho: 118, centrado: true },
+          // Sobre la raya de "Nombre y apellidos:" (85→330), como en el de ejemplo: "APELLIDOS , NOMBRE"
+          { valor: (d) => `${d.apellidos} , ${d.nombre}`, x: 90, y: 637.5, tamano: 11, ancho: 236 },
+          // La firma a la derecha de "Fdo.:" y el sello a su lado
+          { imagen: (d) => d.firma, x: 110, y: 650, ancho: 150, alto: 44, centrado: true },
+          { imagen: (d) => d.sello, x: 335, y: 630, ancho: 148, alto: 110 }, // siempre lleva el sello
+        ],
+      },
+      {
+        plantilla: "plantillas/john-deere-uso-equipos.pdf",
+        archivo: (datos) => `USO DE EQUIPOS JOHN DEERE - ${datos.trabajador}.pdf`,
+        pagina: 0, // son dos hojas y se rellenan las dos: los campos de la segunda llevan "pagina: 1"
+        campos: [
+          // Los huecos de puntitos de la primera hoja, un poco por encima para que la raya quede debajo
+          { valor: () => REPRESENTANTE, x: 173.5, y: 230.7, tamano: 10.5, ancho: 187, centrado: true },
+          { valor: () => REPRESENTANTE_DNI, x: 352.5, y: 230.7, tamano: 10.5, ancho: 79, centrado: true },
+          { valor: () => EMPRESA, x: 180.5, y: 250.9, tamano: 10.5, ancho: 119, centrado: true },
+          { valor: () => "JOHN DEERE GETAFE", x: 159.5, y: 331.4, tamano: 10.5, ancho: 153, centrado: true },
+          { valor: () => "RESTAURACION Y LIMPIEZA", x: 194, y: 351.6, tamano: 10.5, ancho: 244, centrado: true },
+          // La casilla "no es necesario introducir equipos de trabajo" (354→377 y 734→755)
+          { valor: () => "X", x: 365.5, y: 750.3, tamano: 16, ancho: 18, centrado: true },
+          // Fila de la tabla (70,8 | 197,9 | 311,9 | 411 | 538,6; va de 189 a 227,6). El nombre cabe en dos
+          // renglones y, si solo ocupa uno, queda en el medio de la casilla.
+          { pagina: 1, valor: (d) => d.trabajador, x: 134.5, y: 206.3, tamano: 10, ancho: 118, lineas: 2, interlineado: 11, centrado: true, centrarLineas: true },
+          { pagina: 1, valor: (d) => d.dni, x: 255, y: 211.8, tamano: 10.5, ancho: 104, centrado: true },
+          // La firma ocupa toda su casilla, centrada para no pisar las rayas
+          { pagina: 1, imagen: (d) => d.firma, x: 315, y: 191, ancho: 93, alto: 34.5, centrado: true },
+          { pagina: 1, valor: (d) => fechaCorta(d.fecha), x: 474.8, y: 211.8, tamano: 10.5, ancho: 118, centrado: true },
+          // "En ………, a ……de………de……": los huecos van de 327 a 384, de 398 a 419, de 431 a 488,5 y de 500 a 526,3
+          { pagina: 1, valor: () => LUGAR, x: 355.5, y: 327.9, tamano: 11, ancho: 55, centrado: true },
+          { pagina: 1, valor: (d) => dosCifras(d.fecha.getDate()), x: 408.5, y: 327.9, tamano: 11, ancho: 20, centrado: true },
+          { pagina: 1, valor: (d) => MESES[d.fecha.getMonth()].toUpperCase(), x: 459.8, y: 327.9, tamano: 11, ancho: 56, centrado: true },
+          { pagina: 1, valor: (d) => String(d.fecha.getFullYear()), x: 513.2, y: 327.9, tamano: 11, ancho: 26, centrado: true },
+          // "Firma del representante legal y firma de la empresa"
+          { pagina: 1, imagen: (d) => d.sello, x: 100, y: 462, ancho: 148, alto: 110 },
+        ],
+      },
+    ],
+  },
+  {
     // Recibí del manual de seguridad de Valeo: una sola hoja, con el nombre metido en el hueco de
     // rayitas de "El trabajador ______ certifica…" (van de 155 a 392) y de nuevo en "Nombre:".
     id: "valeo",
@@ -579,41 +636,55 @@ export async function generar(especial, plantilla, datos) {
   }
 
   const doc = await PDFDocument.load(plantilla, { updateMetadata: false });
-  const indice = especial.pagina < 0 ? doc.getPageCount() + especial.pagina : especial.pagina;
-  const pagina = doc.getPage(indice);
+  const indiceDe = (n) => (n < 0 ? doc.getPageCount() + n : n);
 
-  // Solo fuentes de las 14 estándar, que todo lector de PDF tiene
-  const fuentes = new Map();
-  const fuenteDe = async (nombre = "Helvetica") => {
-    if (!fuentes.has(nombre)) {
-      const fuente = await doc.embedFont(FUENTES[nombre] ?? StandardFonts.Helvetica);
-      const recurso = anadirRecurso(doc, pagina, "Font", "FEspecial", fuente.ref);
-      fuentes.set(nombre, { fuente, recurso });
-    }
-    return fuentes.get(nombre);
-  };
-
-  const operadores = [];
+  // Casi siempre se rellena una sola hoja, pero un campo puede llevar su "pagina" para escribir en otra
+  const porPagina = new Map();
   for (const campo of especial.campos) {
-    if (campo.imagen) {
-      await pegarImagen(doc, pagina, campo.imagen(datos), campo, operadores);
-      continue;
-    }
-    const texto = (campo.valor(datos) ?? "").trim();
-    if (!texto) continue;
-    const { fuente, recurso } = await fuenteDe(campo.fuente);
-    const { tamano, lineas } = repartir(fuente, texto, campo);
-    lineas.forEach((linea, i) => {
-      // Si ni con la letra más pequeña cabe, se estrecha el texto hasta que quepa
-      const anchoTexto = anchoDelTexto(fuente, linea, tamano);
-      const estrechar = Math.min(1, campo.ancho / anchoTexto);
-      const inicio = campo.centrado ? campo.x - (anchoTexto * estrechar) / 2 : campo.x;
-      const [x, y] = aPdf(doc, pagina, [inicio, campo.y + i * (campo.interlineado ?? tamano * 1.2)]);
-      const tz = estrechar < 1 ? `${numero(estrechar * 100)} Tz ` : "";
-      operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf ${tz}1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escaparWinAnsi(linea)}) Tj ET Q`);
-    });
+    const indice = indiceDe(campo.pagina ?? especial.pagina);
+    porPagina.set(indice, [...(porPagina.get(indice) ?? []), campo]);
   }
-  anadirContenido(doc, pagina, operadores.join("\n"));
+
+  for (const [indice, campos] of porPagina) {
+    const pagina = doc.getPage(indice);
+
+    // Solo fuentes de las 14 estándar, que todo lector de PDF tiene
+    const fuentes = new Map();
+    const fuenteDe = async (nombre = "Helvetica") => {
+      if (!fuentes.has(nombre)) {
+        const fuente = await doc.embedFont(FUENTES[nombre] ?? StandardFonts.Helvetica);
+        const recurso = anadirRecurso(doc, pagina, "Font", "FEspecial", fuente.ref);
+        fuentes.set(nombre, { fuente, recurso });
+      }
+      return fuentes.get(nombre);
+    };
+
+    const operadores = [];
+    for (const campo of campos) {
+      if (campo.imagen) {
+        await pegarImagen(doc, pagina, campo.imagen(datos), campo, operadores);
+        continue;
+      }
+      const texto = (campo.valor(datos) ?? "").trim();
+      if (!texto) continue;
+      const { fuente, recurso } = await fuenteDe(campo.fuente);
+      const { tamano, lineas } = repartir(fuente, texto, campo);
+      // Con "centrarLineas", si el texto ocupa menos líneas de las que admite el campo, se baja
+      // para quedar en el medio del hueco: la "y" es la de la primera línea del campo lleno.
+      const interlineado = campo.interlineado ?? tamano * 1.2;
+      const bajada = campo.centrarLineas ? ((campo.lineas ?? 1) - lineas.length) * interlineado / 2 : 0;
+      lineas.forEach((linea, i) => {
+        // Si ni con la letra más pequeña cabe, se estrecha el texto hasta que quepa
+        const anchoTexto = anchoDelTexto(fuente, linea, tamano);
+        const estrechar = Math.min(1, campo.ancho / anchoTexto);
+        const inicio = campo.centrado ? campo.x - (anchoTexto * estrechar) / 2 : campo.x;
+        const [x, y] = aPdf(doc, pagina, [inicio, campo.y + bajada + i * interlineado]);
+        const tz = estrechar < 1 ? `${numero(estrechar * 100)} Tz ` : "";
+        operadores.push(`q BT 0 g /${recurso} ${numero(tamano)} Tf ${tz}1 0 0 1 ${numero(x)} ${numero(y)} Tm (${escaparWinAnsi(linea)}) Tj ET Q`);
+      });
+    }
+    anadirContenido(doc, pagina, operadores.join("\n"));
+  }
   return guardar(doc);
 }
 

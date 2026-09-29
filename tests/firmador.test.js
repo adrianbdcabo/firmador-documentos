@@ -331,9 +331,10 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     for (const especial of ESPECIALES.flatMap((e) => documentosDe(e).map((d) => ({ ...d, boton: e.boton })))) {
       const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
       const pdf = await generar(especial, plantilla, datos);
-      const indice = especial.pagina < 0 ? (await paginas(pdf)) + especial.pagina : especial.pagina;
-      const todas = await lineas(pdf, indice);
+      const numeroPaginas = await paginas(pdf);
       for (const campo of (especial.campos ?? []).filter((c) => c.valor && [largo, puesto].includes(c.valor(datos)))) {
+        const pagina = campo.pagina ?? especial.pagina;
+        const todas = await lineas(pdf, pagina < 0 ? numeroPaginas + pagina : pagina);
         const [izquierda, derecha] = campo.centrado ? [campo.x - campo.ancho / 2, campo.x + campo.ancho / 2] : [campo.x, campo.x + campo.ancho];
         const alto = (campo.lineas ?? 1) * (campo.interlineado ?? campo.tamano * 1.2);
         // Las líneas de este campo: las que caen en su hueco y están formadas por palabras del texto
@@ -408,6 +409,41 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       const contenido = (await texto(await generar(documento, plantilla, datos), 0)).replace(/\s+/g, " ");
       assert.equal(contenido.split(buscado).length - 1, veces, `"${buscado}" tiene que salir ${veces} vez/veces`);
     }
+  });
+
+  test("JOHN DEERE: dos documentos, y el de uso de equipos se rellena en sus dos hojas", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = {
+      trabajador: resultado.trabajador, dni: resultado.dni, firma: resultado.firma, sello: SELLO,
+      fecha: new Date(2026, 8, 29), apellidos: "PUCHOL VIÑA", nombre: "IGNACIO CARLOS",
+    };
+    const [comunicado, uso] = documentosDe(ESPECIALES.find((e) => e.id === "john-deere"));
+    assert.equal(comunicado.archivo(datos), `COMUNICADO DE REQUISITOS AMBIENTALES JOHN DEERE - ${resultado.trabajador}.pdf`);
+    assert.equal(uso.archivo(datos), `USO DE EQUIPOS JOHN DEERE - ${resultado.trabajador}.pdf`);
+    const leerPlantilla = (d) => new Uint8Array(fs.readFileSync(new URL(`../${d.plantilla}`, import.meta.url)));
+
+    const pdfComunicado = await generar(comunicado, leerPlantilla(comunicado), datos);
+    assert.equal(await paginas(pdfComunicado), 1);
+    const textoComunicado = (await texto(pdfComunicado, 0)).replace(/\s+/g, " ");
+    for (const esperado of ["TEMPS MULTIWORK", "HOSTELERIA Y LIMPIEZA", "29/09/2026", "PUCHOL VIÑA , IGNACIO CARLOS"]) {
+      assert.ok(textoComunicado.includes(esperado), `comunicado: falta "${esperado}"`);
+    }
+    assert.ok(await llevaImagen(pdfComunicado, datos.firma, 0), "el comunicado lleva la firma");
+    assert.ok(await llevaImagen(pdfComunicado, SELLO, 0), "el comunicado lleva el sello");
+
+    const pdfUso = await generar(uso, leerPlantilla(uso), datos);
+    assert.equal(await paginas(pdfUso), 2);
+    const primera = (await texto(pdfUso, 0)).replace(/\s+/g, " ");
+    for (const esperado of ["SOLEDAD FERNANDEZ", "02260608F", "TEMPS MULTIWORK ETT", "JOHN DEERE GETAFE", "RESTAURACION Y LIMPIEZA", "X"]) {
+      assert.ok(primera.includes(esperado), `uso de equipos, hoja 1: falta "${esperado}"`);
+    }
+    const segunda = (await texto(pdfUso, 1)).replace(/\s+/g, " ");
+    for (const esperado of [resultado.trabajador, resultado.dni, "29/09/2026", "MADRID", "29", "SEPTIEMBRE", "2026"]) {
+      assert.ok(segunda.includes(esperado), `uso de equipos, hoja 2: falta "${esperado}"`);
+    }
+    assert.ok(await llevaImagen(pdfUso, datos.firma, 1), "la hoja 2 lleva la firma");
+    assert.ok(await llevaImagen(pdfUso, SELLO, 1), "la hoja 2 lleva el sello");
+    assert.equal(await llevaImagen(pdfUso, datos.firma, 0), false, "la firma no va en la hoja 1");
   });
 
   test("MACADAMIA: el nombre y el DNI van dentro de la frase, que se vuelve a justificar", async () => {
@@ -584,20 +620,25 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
     const datos = { trabajador: resultado.trabajador, dni: resultado.dni, puesto: resultado.puesto, firma: resultado.firma, sello: SELLO, fecha: new Date(2026, 8, 22), apellidos: "PUCHOL VIÑA", nombre: "IGNACIO CARLOS" };
     for (const documento of ESPECIALES.flatMap((e) => documentosDe(e))) {
-      const huecos = (documento.campos ?? []).filter((c) => c.imagen);
-      if (!huecos.length) continue;
+      const todosHuecos = (documento.campos ?? []).filter((c) => c.imagen);
+      if (!todosHuecos.length) continue;
       const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${documento.plantilla}`, import.meta.url)));
       const numeroPaginas = await paginas(plantilla);
-      const indice = documento.pagina < 0 ? numeroPaginas + documento.pagina : documento.pagina;
-      const antes = new Set((await imagenes(plantilla, indice)).map((im) => im.bbox.map(Math.round).join()));
       const pdf = await generar(documento, plantilla, datos);
-      const nuevas = (await imagenes(pdf, indice)).filter((im) => !antes.has(im.bbox.map(Math.round).join()));
-      // Cada imagen pegada tiene que caber entera dentro del hueco que le marca su campo: es lo
-      // que evita que una firma se salga de su casilla y tape las rayas de la tabla.
-      for (const im of nuevas) {
-        const [x0, y0, x1, y1] = im.bbox;
-        const cabe = huecos.some((c) => x0 >= c.x - 0.5 && x1 <= c.x + c.ancho + 0.5 && y0 >= c.y - 0.5 && y1 <= c.y + c.alto + 0.5);
-        assert.ok(cabe, `${documento.plantilla}: la imagen ${im.bbox.map((v) => v.toFixed(1))} se sale de su hueco`);
+      // Cada hoja con imágenes se comprueba por separado: las de un campo con "pagina" propia van a la suya
+      const hojas = new Set(todosHuecos.map((c) => c.pagina ?? documento.pagina));
+      for (const hoja of hojas) {
+        const huecos = todosHuecos.filter((c) => (c.pagina ?? documento.pagina) === hoja);
+        const indice = hoja < 0 ? numeroPaginas + hoja : hoja;
+        const antes = new Set((await imagenes(plantilla, indice)).map((im) => im.bbox.map(Math.round).join()));
+        const nuevas = (await imagenes(pdf, indice)).filter((im) => !antes.has(im.bbox.map(Math.round).join()));
+        // Cada imagen pegada tiene que caber entera dentro del hueco que le marca su campo: es lo
+        // que evita que una firma se salga de su casilla y tape las rayas de la tabla.
+        for (const im of nuevas) {
+          const [x0, y0, x1, y1] = im.bbox;
+          const cabe = huecos.some((c) => x0 >= c.x - 0.5 && x1 <= c.x + c.ancho + 0.5 && y0 >= c.y - 0.5 && y1 <= c.y + c.alto + 0.5);
+          assert.ok(cabe, `${documento.plantilla}: la imagen ${im.bbox.map((v) => v.toFixed(1))} se sale de su hueco`);
+        }
       }
     }
   });
