@@ -655,16 +655,23 @@ async function mostrarIdentificacion() {
   fila.textContent = "";
   if (!suyo) return;
 
+  // Cada dato que se copia va en su propia caja (.dato): con doble clic se selecciona solo el dato,
+  // sin el espacio que le sigue, que es lo que hace Windows con el texto suelto.
+  const dato = (texto) => Object.assign(document.createElement("span"), { className: "dato", textContent: texto });
   const partes = [];
-  if (suyo.dni) partes.push(`${documentoFormateado(suyo.dni).tipo} ${suyo.dni}`);
+  if (suyo.dni) partes.push([`${documentoFormateado(suyo.dni).tipo} `, dato(suyo.dni)]);
   try {
     const { naf } = datosDelLaboral(await abrirCacheado(estado.documento.datos));
-    if (naf) partes.push(`NAF ${nafFormateado(naf)}`);
+    if (naf) {
+      const [provincia, resto] = nafFormateado(naf).split(" ");
+      partes.push(["NAF ", dato(provincia), " ", dato(resto)]);
+    }
   } catch {
     // Hay documentos que no traen la frase con el NAF: entonces se enseña solo el DNI.
   }
   // Mientras se leía el NAF puede haberse cargado otro documento: entonces esto ya no vale.
-  if (estado.resultado === suyo) fila.textContent = partes.join(" · ");
+  if (estado.resultado !== suyo) return;
+  fila.replaceChildren(...partes.flatMap((parte, i) => (i ? [" · ", ...parte] : parte)));
 }
 
 // ITA: el listado de trabajadores en alta

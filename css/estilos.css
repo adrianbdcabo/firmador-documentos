@@ -125,6 +125,7 @@ button { font: inherit; color: inherit; }
 /* DNI/NIE y NAF del trabajador, debajo de su nombre: se pueden seleccionar para copiarlos */
 .identificacion { margin: 2px 0 0; color: var(--texto); letter-spacing: 0.02em; user-select: text; }
 .identificacion:empty { display: none; }
+.identificacion .dato { display: inline-block; }
 
 /* Panel de documentos especiales, a la derecha de las vistas previas */
 /* No crece con los botones: app.js lo limita a la altura de las vistas previas y, si hay más, se hace scroll */
