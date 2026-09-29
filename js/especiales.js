@@ -438,6 +438,41 @@ export const ESPECIALES = [
       { valor: (d) => fechaCorta(d.fecha), x: 310.8, y: 655.5, tamano: 12, ancho: 80 },
     ],
   },
+  {
+    // Normas CAE para contratistas (Aramark): 4 hojas, las dos primeras en español y las otras dos en
+    // inglés. Solo se rellena el pie de la última, con el nombre, la fecha, la firma y el sello.
+    // Este es el sello blanco de siempre, que pega la web: la plantilla no lo trae incrustado.
+    id: "cae-aramark",
+    boton: "CAE ARAMARK",
+    plantilla: "plantillas/cae-aramark.pdf",
+    archivo: (datos) => `DOCU ESPECIAL CAE ARAMARK - ${datos.trabajador}.pdf`,
+    pagina: -1,
+    campos: [
+      // "Employee name:" acaba en 139,9 y "Company and stamp:" empieza en 396,1
+      { valor: (d) => d.trabajador, x: 145, y: 751.4, tamano: 10, ancho: 246 },
+      // "Date and signature:" acaba en 151,8: la fecha, y la firma a continuación
+      { valor: (d) => fechaCorta(d.fecha), x: 155, y: 763.7, tamano: 10, ancho: 52 },
+      { imagen: (d) => d.firma, x: 211.2, y: 753.8, ancho: 82, alto: 35 },
+      // "Company and stamp:" acaba en 482,4 y la hoja en 594
+      { valor: () => "TEMPS MULTIWORK", x: 487, y: 751.4, tamano: 10, ancho: 100 },
+      { imagen: (d) => d.sello, x: 436.4, y: 757.3, ancho: 84, alto: 62.3 },
+    ],
+  },
+  {
+    // Recibí del manual de seguridad de Valeo: una sola hoja, con el nombre metido en el hueco de
+    // rayitas de "El trabajador ______ certifica…" (van de 155 a 392) y de nuevo en "Nombre:".
+    id: "valeo",
+    boton: "VALEO",
+    plantilla: "plantillas/valeo.pdf",
+    archivo: (datos) => `DOCU ESPECIAL VALEO - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      { valor: (d) => d.trabajador, x: 273.5, y: 172.8, tamano: 12, ancho: 233, centrado: true },
+      { valor: (d) => d.trabajador, x: 130, y: 357.9, tamano: 12, ancho: 300 },
+      { imagen: (d) => d.firma, x: 123.2, y: 361.2, ancho: 82, alto: 35 },
+      { valor: (d) => fechaCorta(d.fecha), x: 122.5, y: 408.6, tamano: 12, ancho: 100 },
+    ],
+  },
 ];
 
 // ------------------------------------------------------------------ registro de EPI antiguo

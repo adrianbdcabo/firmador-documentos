@@ -510,6 +510,29 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     }
   });
 
+  test("CAE ARAMARK y VALEO: nombre, fecha, firma y, en CAE, el sello blanco", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, firma: resultado.firma, sello: SELLO, fecha: new Date(2026, 8, 29) };
+    // [id, nombre del archivo, veces que sale el nombre, página, ¿lleva sello?]
+    const casos = [
+      ["cae-aramark", `DOCU ESPECIAL CAE ARAMARK - ${resultado.trabajador}.pdf`, 1, 3, true],
+      ["valeo", `DOCU ESPECIAL VALEO - ${resultado.trabajador}.pdf`, 2, 0, false],
+    ];
+    for (const [id, archivo, nombres, pagina, conSello] of casos) {
+      const especial = ESPECIALES.find((e) => e.id === id);
+      assert.equal(especial.archivo(datos), archivo);
+      const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${especial.plantilla}`, import.meta.url)));
+      const vacia = (await texto(plantilla)).replace(/\s+/g, " ");
+      assert.ok(!vacia.includes("29/09/2026") && !vacia.includes(resultado.trabajador), `${id}: la plantilla va sin datos`);
+      const pdf = await generar(especial, plantilla, datos);
+      const contenido = (await texto(pdf, pagina)).replace(/\s+/g, " ");
+      assert.equal(contenido.split(resultado.trabajador).length - 1, nombres, `${archivo}: el nombre sale ${nombres} vez/veces`);
+      assert.equal(contenido.split("29/09/2026").length - 1, 1, `${archivo}: la fecha`);
+      assert.ok(await llevaImagen(pdf, datos.firma, pagina), `${archivo}: lleva la firma`);
+      assert.equal(await llevaImagen(pdf, SELLO, pagina), conSello, `${archivo}: ${conSello ? "lleva" : "no lleva"} el sello`);
+    }
+  });
+
   test("EPIs antiguos: cada X cae en la columna que se ha marcado", async () => {
     const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
     const datos = {

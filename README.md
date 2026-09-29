@@ -80,9 +80,9 @@ Quitar un ITA de la carpeta compartida solo pueden los correos de `CORREOS_ADMIN
    dónde va cada dato (en puntos desde arriba a la izquierda, con la "y" en la línea base del texto, y el
    ancho del hueco para que el texto se encoja si no cabe).
 
-Ahora mismo hay dieciocho: REAL MADRID, ATLETI, AMADEUS, CALIER, CEPSA, CUN MADRID, IESE MADRID,
+Ahora mismo hay veinte: REAL MADRID, ATLETI, AMADEUS, CAE ARAMARK, CALIER, CEPSA, CUN MADRID, IESE MADRID,
 MACADAMIA, MERCK TRES CANTOS, MONTESA HONDA, PHARMAMAR, PLASTIPAK, SANDOZ, SANITAS, TALGO, TELEFONICA,
-THALES y WURTH. Tres
+THALES, VALEO y WURTH. Tres
 de ellos descargan dos documentos: SANDOZ (RECIBI e INFO), CEPSA (ANEXO 12 y ANEXO 24) y TALGO
 (REGISTRO DE MEDIO AMBIENTE y ACUSE RECIBO).
 
