@@ -745,6 +745,9 @@ function contarDondeSeGuardan() {
   $("nota-privacidad").textContent = compartido
     ? "Los documentos laborales se procesan en este navegador y no se envían a ningún servidor. Los ITA sí: se guardan en la carpeta compartida de la empresa durante 10 días."
     : "Los documentos se procesan en este navegador: no se envían a ningún servidor.";
+  $("privacidad-acceso").innerHTML = compartido
+    ? "<strong>Quién puede entrar.</strong> Solo se entra con el correo de la empresa y un código de un solo uso. Cada vez que alguien sube, descarga o quita un ITA queda apuntado su correo, qué hizo y cuándo; ese apunte se guarda 90 días y no contiene ningún dato de ningún trabajador."
+    : "<strong>Sin cuentas ni registros.</strong> Esta versión de la web no pide correo ni contraseña, no apunta quién la usa ni qué haces en ella, y no usa cookies ni analítica. Lo único que guarda es lo de «ITA guardados», y solo en este navegador.";
   $("privacidad-itas").innerHTML = compartido
     ? "<strong>Los ITA sí se guardan.</strong> Al subir uno, su PDF y la lista de personas que trae (nombre, DNI o NIE, número de afiliación y fecha de alta) se guardan en una base de datos de la empresa alojada en la Unión Europea, para que lo tengan todos los compañeros. Se borran solos a los 10 días y no se copian a ningún otro sitio."
     : "<strong>Los ITA se quedan en este navegador.</strong> No se suben a ningún sitio: solo los ves tú, en este ordenador, y se borran solos a los 10 días.";
