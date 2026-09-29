@@ -9,7 +9,7 @@ import path from "node:path";
 import { after, describe, test } from "node:test";
 
 import { episDelPuesto } from "../js/epis.js";
-import { documentosDe, EPIS, EPIS_ANTIGUOS, ESPECIALES, generar, ordenados } from "../js/especiales.js";
+import { documentosDe, EPIS, EPIS_ANTIGUOS, ESPECIALES, NO_USO_MAQUINARIA, generar, ordenados } from "../js/especiales.js";
 import { fechaDeHoy } from "../js/fecha.js";
 import { deHojaSuelta, desdeImagen, desdePdf } from "../js/firma.js";
 import { decodificar, png, pngParaPdf } from "../js/imagenes.js";
@@ -570,6 +570,19 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       assert.ok(await llevaImagen(pdf, datos.firma, pagina), `${archivo}: lleva la firma`);
       assert.equal(await llevaImagen(pdf, SELLO, pagina), conSello, `${archivo}: ${conSello ? "lleva" : "no lleva"} el sello`);
     }
+  });
+
+  test("NO USO MAQUINARIA: lleva la fecha de hoy y ninguna de las viejas", async () => {
+    const datos = { trabajador: "ANA PRUEBA", fecha: new Date(2026, 8, 29) };
+    assert.equal(NO_USO_MAQUINARIA.archivo(datos), "NO USO MAQUINARIA - ANA PRUEBA.pdf");
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${NO_USO_MAQUINARIA.plantilla}`, import.meta.url)));
+    const pdf = await generar(NO_USO_MAQUINARIA, plantilla, datos);
+    const contenido = (await texto(pdf)).replace(/\s+/g, " ");
+    assert.ok(contenido.includes("En Madrid a"), "sigue la línea de la fecha"); // la fecha nueva va con glifos sueltos, que el lector de texto no junta
+    for (const vieja of ["22 de mayo", "2024", "Abril", "Octubre", "2025"]) {
+      assert.ok(!contenido.includes(vieja), `sigue la fecha vieja "${vieja}"`);
+    }
+    assert.ok(contenido.includes("TEMPS MULTIWORK ETT con CIF B01130186"), "el resto del texto se queda");
   });
 
   test("EPIs antiguos: cada X cae en la columna que se ha marcado", async () => {

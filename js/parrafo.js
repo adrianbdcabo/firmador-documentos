@@ -111,11 +111,14 @@ export function repartirEnLineas(palabras, parrafo, medida) {
  *   "winansi"  fuentes normales (TrueType o Type1) con codificación WinAnsi: la letra se escribe
  *              tal cual, con su código de siempre. Es como las mete Word, y es lo que trae el
  *              documento de MACADAMIA.
- * Si no es de ninguno de los dos tipos devuelve null y se tira de la Helvetica de repuesto.
+ * Si no es de ninguno de los dos tipos devuelve null y se tira de la Helvetica de repuesto. Si el PDF
+ * trae varias fuentes con el mismo nombre (Word mete una "Aptos" por cada manera de escribir), gana
+ * la del modo `preferido`.
  */
-function fuenteDelPdf(doc, pagina, base) {
+function fuenteDelPdf(doc, pagina, base, preferido) {
   const fuentes = obtener(doc, heredado(doc, pagina.node, "Resources"), "Font");
   if (!(fuentes instanceof PDFDict)) return null;
+  let primera = null;
   for (const [, valor] of fuentes.entries()) {
     const fuente = resolver(doc, valor);
     if (!(fuente instanceof PDFDict)) continue;
@@ -123,9 +126,11 @@ function fuenteDelPdf(doc, pagina, base) {
     if (!nombre || nombreBase(nombre) !== base) continue;
     const modo = modoDeEscritura(doc, fuente);
     if (!modo) continue;
-    return { ref: valor instanceof PDFRef ? valor : doc.context.register(fuente), modo };
+    const encontrada = { ref: valor instanceof PDFRef ? valor : doc.context.register(fuente), modo };
+    if (!preferido || modo === preferido) return encontrada;
+    primera ??= encontrada;
   }
-  return null;
+  return primera;
 }
 
 /** Cómo se escribe con esa fuente: "glifos", "winansi", o null si no se sabe escribir con ella. */
@@ -192,13 +197,13 @@ export function mapasWinAnsi(doc, pagina) {
  *   (texto) Tj   escribe esas letras (texto normal, con la fuente de repuesto)
  * Cada palabra se coloca con su propio Tm, que es justamente como lo hace el documento original.
  */
-export function escribir(doc, pagina, lineas, { mapas, respaldo }) {
+export function escribir(doc, pagina, lineas, { mapas, respaldo, modo }) {
   // Las fuentes se añaden a la página una sola vez y se reutiliza su nombre (/FTa1, /FTa2…).
   const recursos = new Map();
   const fuenteDe = (base, propia, negrita) => {
     const clave = propia ? base : `respaldo-${negrita ? "b" : "n"}`;
     if (!recursos.has(clave)) {
-      const propio = propia ? fuenteDelPdf(doc, pagina, base) : null;
+      const propio = propia ? fuenteDelPdf(doc, pagina, base, modo) : null;
       const valor = propio?.ref ?? (negrita ? respaldo.negrita : respaldo.normal).ref;
       // La Helvetica de repuesto también se escribe con los códigos de siempre (WinAnsi).
       recursos.set(clave, { nombre: anadirRecurso(doc, pagina, "Font", "FTa", valor), modo: propio?.modo ?? "winansi" });

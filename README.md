@@ -41,7 +41,10 @@ diez días en una carpeta compartida por toda la oficina (ver *Los ITA* más aba
    equipos de protección individual, por si una empresa usuaria no acepta el nuevo. Antes de
    descargarlo sale una pantallita para marcar, equipo por equipo, si no se usa, si lo aporta la
    empresa usuaria o si lo aporta el trabajador; viene marcada como viene el impreso de siempre.
-8. Debajo del nombre se ven el **DNI/NIE y el NAF** del trabajador (el NAF con los dos dígitos
+8. **NO USO MAQUINARIA**, junto a EPIs antiguos, descarga la carta en la que TEMPS confirma que el
+   registro de equipos de trabajo no aplica, con la fecha de hoy. Se llama
+   "NO USO MAQUINARIA - nombre del trabajador.pdf".
+9. Debajo del nombre se ven el **DNI/NIE y el NAF** del trabajador (el NAF con los dos dígitos
    de la provincia separados, "28 1548815306"), para tenerlos a mano al entrar en la Seguridad
    Social.
 

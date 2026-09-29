@@ -32,6 +32,7 @@
 import { fechaDeHoy, MESES } from "./fecha.js";
 import { generarCalier } from "./calier.js";
 import { generarMacadamia } from "./macadamia.js";
+import { generarMaquinaria } from "./maquinaria.js";
 import { StandardFonts } from "../vendor/pdf-lib/pdf-lib.esm.min.js";
 import { PDFDocument, aPdf, anadirContenido, anadirRecurso, escaparWinAnsi, guardar, incrustarImagen, invertir, multiplicar, numero, transformacion, winAnsi } from "./pdfbase.js";
 
@@ -604,6 +605,16 @@ export const EPIS_ANTIGUOS = {
     },
     { imagen: (d) => d.firma, x: 31, y: 737.8, ancho: 126.8, alto: 48.7, centrado: true },
   ],
+};
+
+// La carta de NO USO MAQUINARIA: solo lleva la fecha de hoy, que se cambia dentro de su primera
+// línea (js/maquinaria.js). Igual que el de EPI antiguos, su botón va al lado del TA2.
+export const NO_USO_MAQUINARIA = {
+  id: "no-uso-maquinaria",
+  boton: "NO USO MAQUINARIA",
+  plantilla: "plantillas/no-uso-maquinaria.pdf",
+  archivo: (datos) => `NO USO MAQUINARIA - ${datos.trabajador}.pdf`,
+  rellenar: generarMaquinaria,
 };
 
 // Los botones de los dos estadios van siempre los primeros: son documentos de sitios concretos
