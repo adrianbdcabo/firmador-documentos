@@ -525,6 +525,25 @@ export const ESPECIALES = [
     ],
   },
   {
+    // Acuse de recibo de las normas de la planta de Siegfried en Barberà del Vallès: una sola hoja.
+    // Los tres datos de las rayas de arriba y, en la fila de la tabla, el nombre, la firma y la fecha.
+    id: "siegfried-barbera",
+    boton: "SIEGFRIED BARBERA",
+    plantilla: "plantillas/siegfried-barbera.pdf",
+    archivo: (datos) => `DOCU ESPECIAL SIEGFRIED BARBERA - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      // "El/la trabajador/a" (161,9→370,8), "con DNI" (408→502,6) y "perteneciente a la empresa" (201,1→402,6)
+      { valor: (d) => d.trabajador, x: 165.6, y: 213, tamano: 10.5, ancho: 202 },
+      { valor: (d) => d.dni, x: 415, y: 213, tamano: 10.5, ancho: 85 },
+      { valor: () => "TEMPS MULTIWORK ETT S.L.", x: 211.4, y: 228.1, tamano: 10.5, ancho: 190 },
+      // Fila de la tabla (85 | 227 | 369 | 511; va de 420 a 468): el nombre en la primera casilla, que es estrecha
+      { valor: (d) => d.trabajador, x: 156, y: 439.5, tamano: 8, ancho: 136, centrado: true, lineas: 2, interlineado: 9 },
+      { imagen: (d) => d.firma, x: 252.4, y: 426.1, ancho: 89, alto: 38.5, centrado: true },
+      { valor: (d) => fechaCorta(d.fecha), x: 440, y: 444.6, tamano: 10.5, ancho: 120, centrado: true },
+    ],
+  },
+  {
     // Acuse de recibo de las normas y requisitos de Siegfried El Masnou: 3 hojas. Solo se rellena la
     // primera; el cuestionario de la segunda ya trae las respuestas marcadas dentro de la plantilla
     // (scripts/plantilla-siegfried.mjs), igual que en el documento de ejemplo.

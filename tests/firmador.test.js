@@ -487,6 +487,21 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     ].sort((a, b) => a[1] - b[1] || a[0] - b[0]));
   });
 
+  test("SIEGFRIED BARBERA: los tres datos de arriba y la fila de la tabla con nombre, firma y fecha", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, firma: resultado.firma, sello: SELLO, fecha: new Date(2026, 4, 2) };
+    const siegfried = ESPECIALES.find((e) => e.id === "siegfried-barbera");
+    assert.equal(siegfried.boton, "SIEGFRIED BARBERA");
+    assert.equal(siegfried.archivo(datos), `DOCU ESPECIAL SIEGFRIED BARBERA - ${resultado.trabajador}.pdf`);
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${siegfried.plantilla}`, import.meta.url)));
+    const pdf = await generar(siegfried, plantilla, datos);
+    assert.equal(await paginas(pdf), 1);
+    const contenido = (await texto(pdf, 0)).replace(/\s+/g, " ");
+    for (const esperado of [resultado.dni, "TEMPS MULTIWORK ETT S.L.", "02/05/2026"]) assert.ok(contenido.includes(esperado), `falta "${esperado}"`);
+    for (const palabra of resultado.trabajador.split(" ")) assert.ok(contenido.includes(palabra), `falta "${palabra}"`);
+    assert.ok(await llevaImagen(pdf, datos.firma, 0), "lleva la firma");
+  });
+
   test("MACADAMIA: el nombre y el DNI van dentro de la frase, que se vuelve a justificar", async () => {
     const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
     const datos = { trabajador: resultado.trabajador, dni: resultado.dni, fecha: new Date(2026, 8, 23) };
