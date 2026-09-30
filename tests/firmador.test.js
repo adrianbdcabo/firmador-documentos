@@ -446,6 +446,21 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     assert.equal(await llevaImagen(pdfUso, datos.firma, 0), false, "la firma no va en la hoja 1");
   });
 
+  test("SANOFI: nombre, DNI, fechas (hoy y dentro de tres años), la X de Meridian y la firma", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, firma: resultado.firma, sello: SELLO, fecha: new Date(2028, 1, 29) };
+    const sanofi = ESPECIALES.find((e) => e.id === "sanofi");
+    assert.equal(sanofi.archivo(datos), `DOCU ESPECIAL SANOFI - ${resultado.trabajador}.pdf`);
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${sanofi.plantilla}`, import.meta.url)));
+    const pdf = await generar(sanofi, plantilla, datos);
+    assert.equal(await paginas(pdf), 1);
+    const contenido = (await texto(pdf, 0)).replace(/\s+/g, " ");
+    for (const esperado of [resultado.trabajador, resultado.dni, "TEMPS MULTIWORK ETT S.L.", "29/02/2028", "28/02/2031"]) {
+      assert.ok(contenido.includes(esperado), `falta "${esperado}"`);
+    }
+    assert.ok(await llevaImagen(pdf, datos.firma, 0), "lleva la firma");
+  });
+
   test("MACADAMIA: el nombre y el DNI van dentro de la frase, que se vuelve a justificar", async () => {
     const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
     const datos = { trabajador: resultado.trabajador, dni: resultado.dni, fecha: new Date(2026, 8, 23) };

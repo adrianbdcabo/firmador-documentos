@@ -41,6 +41,14 @@ const TAMANO_MINIMO = 6; // si el texto no cabe, se encoge hasta aquí
 const dosCifras = (n) => String(n).padStart(2, "0");
 const fechaCorta = (fecha) => `${dosCifras(fecha.getDate())}/${dosCifras(fecha.getMonth() + 1)}/${fecha.getFullYear()}`;
 
+/** La misma fecha unos años después (un 29 de febrero pasa al 28 si el año no es bisiesto). */
+const masAnios = (fecha, anios) => {
+  const resultado = new Date(fecha.getFullYear() + anios, fecha.getMonth(), 1);
+  const ultimo = new Date(resultado.getFullYear(), resultado.getMonth() + 1, 0).getDate();
+  resultado.setDate(Math.min(fecha.getDate(), ultimo));
+  return resultado;
+};
+
 // Datos nuestros que se repiten en varios impresos.
 const EMPRESA = "TEMPS MULTIWORK ETT";
 const CIF = "B01130186";
@@ -514,6 +522,29 @@ export const ESPECIALES = [
           { pagina: 1, imagen: (d) => d.sello, x: 100, y: 462, ancho: 148, alto: 110 },
         ],
       },
+    ],
+  },
+  {
+    // Declaración individual de coordinación de actividades del personal externo de Sanofi Aventis.
+    // La actividad dura tres años desde hoy, y se marca siempre el centro de Oficinas Meridian.
+    id: "sanofi",
+    boton: "SANOFI",
+    plantilla: "plantillas/sanofi.pdf",
+    archivo: (datos) => `DOCU ESPECIAL SANOFI - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      // Cuadro de arriba: "Nombre y Apellidos:" acaba en 188,7, "D.N.I.:" en 113,6 y "Empresa Contratista:" en 192,9
+      { valor: (d) => d.trabajador, x: 196, y: 161.9, tamano: 10.5, ancho: 380 },
+      { valor: (d) => d.dni, x: 121, y: 182.5, tamano: 10.5, ancho: 200 },
+      { valor: () => "TEMPS MULTIWORK ETT S.L.", x: 200, y: 203.2, tamano: 10.5, ancho: 300 },
+      // "Fecha inicio actividad:" acaba en 199,5 y "Fecha término:" empieza en 351,4 y acaba en 426,9
+      { valor: (d) => fechaCorta(d.fecha), x: 206, y: 227.6, tamano: 10.5, ancho: 140 },
+      { valor: (d) => fechaCorta(masAnios(d.fecha, 3)), x: 433, y: 227.6, tamano: 10.5, ancho: 100 },
+      // La casilla de "Oficinas Meridian (Barcelona)" va de 115,7 a 121 y de 384 a 390,7
+      { valor: () => "X", x: 118.4, y: 389.3, tamano: 10.5, ancho: 7, centrado: true },
+      // La firma, entre "Firma del trabajador:" y la raya de "D.", y la fecha bajo "(Fecha)" (acaba en 121,2)
+      { imagen: (d) => d.firma, x: 100, y: 712, ancho: 120, alto: 42, centrado: true },
+      { valor: (d) => fechaCorta(d.fecha), x: 130, y: 776.2, tamano: 10.5, ancho: 120 },
     ],
   },
   {

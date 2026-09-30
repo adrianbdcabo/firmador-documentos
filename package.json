@@ -1,6 +1,6 @@
 {
   "name": "firmador-documentos",
-  "version": "1.42.2",
+  "version": "1.43",
   "description": "Firmador de documentos laborales (web estatica)",
   "scripts": {
     "test": "node --test tests/*.test.js",
