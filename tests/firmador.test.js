@@ -461,6 +461,32 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     assert.ok(await llevaImagen(pdf, datos.firma, 0), "lleva la firma");
   });
 
+  test("SIEGFRIED EL MASNOU: hoja 1 rellena y las 11 X del cuestionario en su sitio", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = {
+      trabajador: resultado.trabajador, dni: resultado.dni, firma: resultado.firma, sello: SELLO,
+      fecha: new Date(2026, 5, 30), apellidos: "PUCHOL VIÑA", nombre: "IGNACIO CARLOS",
+    };
+    const siegfried = ESPECIALES.find((e) => e.id === "siegfried-el-masnou");
+    assert.equal(siegfried.boton, "SIEGFRIED EL MASNOU");
+    assert.equal(siegfried.archivo(datos), `DOCU ESPECIAL SIEGFRIED EL MASNOU - ${resultado.trabajador}.pdf`);
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${siegfried.plantilla}`, import.meta.url)));
+    const pdf = await generar(siegfried, plantilla, datos);
+    assert.equal(await paginas(pdf), 3);
+    const primera = (await texto(pdf, 0)).replace(/\s+/g, " ");
+    for (const esperado of ["PUCHOL VIÑA, IGNACIO CARLOS", resultado.dni, "TEMPS MULTIWORK S.L. ETT", "BARCELONA", "30", "JUNIO", "26"]) {
+      assert.ok(primera.includes(esperado), `hoja 1: falta "${esperado}"`);
+    }
+    assert.ok(await llevaImagen(pdf, datos.firma, 0), "la hoja 1 lleva la firma");
+    // Las X de la hoja 2 vienen en la plantilla, en las mismas posiciones que en el documento de ejemplo
+    const equis = (await imagenes(pdf, 1)).filter((im) => Math.abs(im.bbox[2] - im.bbox[0] - 12) < 0.05);
+    assert.equal(equis.length, 11, "once X de imagen en la hoja 2");
+    assert.deepEqual(equis.map((im) => im.bbox.slice(0, 2).map((v) => Math.round(v * 10) / 10)).sort((a, b) => a[1] - b[1] || a[0] - b[0]), [
+      [76.2, 335.3], [77.5, 420.1], [77.5, 531.4], [85.9, 587.9], [243.1, 585.2], [402.5, 585.7],
+      [244, 637.4], [400.3, 638.7], [86.3, 636.9], [86.7, 668.3], [401.6, 668.7],
+    ].sort((a, b) => a[1] - b[1] || a[0] - b[0]));
+  });
+
   test("MACADAMIA: el nombre y el DNI van dentro de la frase, que se vuelve a justificar", async () => {
     const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
     const datos = { trabajador: resultado.trabajador, dni: resultado.dni, fecha: new Date(2026, 8, 23) };

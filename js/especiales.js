@@ -525,6 +525,30 @@ export const ESPECIALES = [
     ],
   },
   {
+    // Acuse de recibo de las normas y requisitos de Siegfried El Masnou: 3 hojas. Solo se rellena la
+    // primera; el cuestionario de la segunda ya trae las respuestas marcadas dentro de la plantilla
+    // (scripts/plantilla-siegfried.mjs), igual que en el documento de ejemplo.
+    id: "siegfried-el-masnou",
+    boton: "SIEGFRIED EL MASNOU",
+    plantilla: "plantillas/siegfried-el-masnou.pdf",
+    archivo: (datos) => `DOCU ESPECIAL SIEGFRIED EL MASNOU - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      // Las tres rayas de arriba: "El Sr. / La Sra." (141,7→533), "con DNI Nº" (119,5→227,4) y la empresa (349,8→530,3).
+      // El nombre va con los apellidos delante, como en el de ejemplo.
+      { valor: (d) => `${d.apellidos}, ${d.nombre}`, x: 147.7, y: 112.8, tamano: 9, ancho: 380 },
+      { valor: (d) => d.dni, x: 148.3, y: 137.2, tamano: 9, ancho: 76 },
+      { valor: () => "TEMPS MULTIWORK S.L. ETT", x: 349.8, y: 137.2, tamano: 9, ancho: 178 },
+      // "En ______, a ____ de ________ de 20__": los huecos van de 88 a 178, de 193,5 a 213,6, de 228,7 a 323,9 y de 350,2 a 359,1
+      { valor: () => "BARCELONA", x: 94.6, y: 535.5, tamano: 9, ancho: 82 },
+      { valor: (d) => dosCifras(d.fecha.getDate()), x: 203.6, y: 534.5, tamano: 9, ancho: 19, centrado: true },
+      { valor: (d) => MESES[d.fecha.getMonth()].toUpperCase(), x: 276.3, y: 534.5, tamano: 9, ancho: 92, centrado: true },
+      { valor: (d) => String(d.fecha.getFullYear()).slice(-2), x: 354.7, y: 535.4, tamano: 9, ancho: 9, centrado: true },
+      // El recuadro de la firma, que va de 375 a 543 (el rótulo "Firma" ocupa el principio): la firma como en el ejemplo
+      { imagen: (d) => d.firma, x: 405.9, y: 481.1, ancho: 116, alto: 51, centrado: true },
+    ],
+  },
+  {
     // Declaración individual de coordinación de actividades del personal externo de Sanofi Aventis.
     // La actividad dura tres años desde hoy, y se marca siempre el centro de Oficinas Meridian.
     id: "sanofi",
