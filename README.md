@@ -44,7 +44,10 @@ diez días en una carpeta compartida por toda la oficina (ver *Los ITA* más aba
 8. **NO USO MAQUINARIA**, junto a EPIs antiguos, descarga la carta en la que TEMPS confirma que el
    registro de equipos de trabajo no aplica, con la fecha de hoy. Se llama
    "NO USO MAQUINARIA - nombre del trabajador.pdf".
-9. Debajo del nombre se ven el **DNI/NIE y el NAF** del trabajador (el NAF con los dos dígitos
+9. **PRL CAMARERO**, junto a NO USO MAQUINARIA, descarga el diploma de PRL de camarero/a de
+   Talent Trainers con el nombre y el DNI/NIE del trabajador. Se llama "PRL CAMARERO - nombre del
+   trabajador.pdf".
+10. Debajo del nombre se ven el **DNI/NIE y el NAF** del trabajador (el NAF con los dos dígitos
    de la provincia separados, "28 1548815306"), para tenerlos a mano al entrar en la Seguridad
    Social.
 

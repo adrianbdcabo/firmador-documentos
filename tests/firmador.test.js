@@ -9,7 +9,7 @@ import path from "node:path";
 import { after, describe, test } from "node:test";
 
 import { episDelPuesto } from "../js/epis.js";
-import { documentosDe, EPIS, EPIS_ANTIGUOS, ESPECIALES, NO_USO_MAQUINARIA, generar, ordenados } from "../js/especiales.js";
+import { documentosDe, EPIS, EPIS_ANTIGUOS, ESPECIALES, NO_USO_MAQUINARIA, PRL_CAMARERO, generar, ordenados } from "../js/especiales.js";
 import { fechaDeHoy } from "../js/fecha.js";
 import { deHojaSuelta, desdeImagen, desdePdf } from "../js/firma.js";
 import { decodificar, png, pngParaPdf } from "../js/imagenes.js";
@@ -639,6 +639,20 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
       assert.ok(!contenido.includes(vieja), `sigue la fecha vieja "${vieja}"`);
     }
     assert.ok(contenido.includes("TEMPS MULTIWORK ETT con CIF B01130186"), "el resto del texto se queda");
+  });
+
+  test("PRL CAMARERO: nombre y DNI en el diploma, sin rastro del trabajador de la plantilla", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, fecha: new Date(2026, 9, 1) };
+    assert.equal(PRL_CAMARERO.archivo(datos), `PRL CAMARERO - ${resultado.trabajador}.pdf`);
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${PRL_CAMARERO.plantilla}`, import.meta.url)));
+    const pdf = await generar(PRL_CAMARERO, plantilla, datos);
+    assert.equal(await paginas(pdf), 3);
+    const contenido = (await texto(pdf, 0)).replace(/s+/g, " ");
+    assert.ok(contenido.includes(resultado.dni), "falta el DNI");
+    for (const palabra of resultado.trabajador.split(" ")) assert.ok(contenido.includes(palabra), `falta "${palabra}"`);
+    for (const vieja of ["BECERRA", "11898769H", "21/08/2023"]) assert.ok(!contenido.includes(vieja), `sigue "${vieja}"`);
+    assert.ok(contenido.includes("Seguridad y Salud Laboral en el Sector") && contenido.includes("Prevención"), "el resto del diploma se queda, con sus acentos");
   });
 
   test("EPIs antiguos: cada X cae en la columna que se ha marcado", async () => {

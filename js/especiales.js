@@ -691,6 +691,22 @@ export const NO_USO_MAQUINARIA = {
   rellenar: generarMaquinaria,
 };
 
+// El diploma de PRL de camarero/a de Talent Trainers: una sola hoja con el nombre y el DNI del
+// trabajador (las otras dos hojas son el contenido del curso y se quedan como están). Su botón va
+// también al lado del TA2. La plantilla se prepara con scripts/plantilla-prl-camarero.mjs.
+export const PRL_CAMARERO = {
+  id: "prl-camarero",
+  boton: "PRL CAMARERO",
+  plantilla: "plantillas/prl-camarero.pdf",
+  archivo: (datos) => `PRL CAMARERO - ${datos.trabajador}.pdf`,
+  pagina: 0,
+  campos: [
+    // Tras "D./Dª" (acaba en 215) y "con DNI/NIE" (acaba en 250); el hueco llega hasta 696 y 387
+    { valor: (d) => d.trabajador, x: 238.8, y: 214.4, tamano: 15.96, ancho: 450, fuente: "Helvetica-Bold" },
+    { valor: (d) => d.dni, x: 292.8, y: 237.4, tamano: 14, ancho: 90 },
+  ],
+};
+
 // Los botones de los dos estadios van siempre los primeros: son documentos de sitios concretos
 // (los campos de fútbol) y se piden mucho. Los demás, por orden alfabético, para encontrarlos de
 // un vistazo sin tener que leerlos todos.

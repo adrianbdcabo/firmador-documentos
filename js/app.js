@@ -1,7 +1,7 @@
 // © 2026 Adrián Barroso de Cabo.
 // Interfaz: cargar el documento laboral (y, si hace falta, la firma y el sello), previsualizar y descargar.
 
-import { COLUMNAS_EPI, EPIS, EPIS_ANTIGUOS, NO_USO_MAQUINARIA, documentosDe, generar, ordenados } from "./especiales.js";
+import { COLUMNAS_EPI, EPIS, EPIS_ANTIGUOS, NO_USO_MAQUINARIA, PRL_CAMARERO, documentosDe, generar, ordenados } from "./especiales.js";
 import { fechaDeHoy } from "./fecha.js";
 import * as firmas from "./firma.js";
 import { abrirCacheado, calentar, ErrorProcesado, FirmaNoEncontrada, procesar } from "./pdf.js";
@@ -137,6 +137,7 @@ async function procesarDocumento({ mantenerVista = false } = {}) {
   $("btn-ta2").disabled = false;
   $("btn-epis").disabled = false;
   $("btn-maquinaria").disabled = false;
+  $("btn-prl").disabled = false;
   ponerEstado(TEXTOS.listo);
   buscarEnITAs(resultado.dni).catch(() => {}); // no debe estorbar si falla el almacén
   await avisarFecha();
@@ -157,6 +158,7 @@ function limpiar() {
   $("btn-ta2").disabled = true;
   $("btn-epis").disabled = true;
   $("btn-maquinaria").disabled = true;
+  $("btn-prl").disabled = true;
   estado.enITA = null;
   $("identificacion").textContent = "";
   $("fila-ita").hidden = true;
@@ -1003,6 +1005,7 @@ function iniciar() {
   $("btn-ta2").addEventListener("click", enOrden(descargarTA2));
   $("btn-epis").addEventListener("click", enOrden(() => descargarEspecial(EPIS_ANTIGUOS)));
   $("btn-maquinaria").addEventListener("click", enOrden(() => descargarEspecial(NO_USO_MAQUINARIA)));
+  $("btn-prl").addEventListener("click", enOrden(() => descargarEspecial(PRL_CAMARERO)));
   $("btn-ita").addEventListener("click", enOrden(descargarITA));
   $("btn-itas").addEventListener("click", enOrden(abrirITAs));
   $("anadir-ita").addEventListener("click", () => $("input-ita").click());
