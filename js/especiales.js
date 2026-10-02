@@ -568,6 +568,28 @@ export const ESPECIALES = [
     ],
   },
   {
+    // Certificado de cumplimiento de obligaciones de Siemens (Tres Cantos): una sola hoja, firmada por
+    // nuestra representante, así que no lleva datos del trabajador. Se borraron de la plantilla los
+    // puntitos de la fecha, del párrafo en español y del nombre de abajo, y todo eso se escribe aquí
+    // con los saltos de línea ya puestos, como en el documento de ejemplo.
+    id: "siemens-tres-cantos",
+    boton: "SIEMENS TRES CANTOS",
+    plantilla: "plantillas/siemens-tres-cantos.pdf",
+    archivo: (datos) => `DOCU ESPECIAL SIEMENS TRES CANTOS - ${datos.trabajador}.pdf`,
+    pagina: 0,
+    campos: [
+      { valor: (d) => `Madrid a ${d.fecha.getDate()} de ${MESES[d.fecha.getMonth()]} de ${d.fecha.getFullYear()}`, x: 85.1, y: 221.8, tamano: 10, ancho: 190 },
+      { valor: () => "Por la presente, D./Dña. Soledad Fernández Muñoz con D.N.I. 02260608F actuando en nombre", x: 85.1, y: 267.8, tamano: 10, ancho: 428 },
+      { valor: () => "y representación de la entidad TEMPS MULTIWORK ETT SL con C.I.F. número B01130186 y", x: 85.1, y: 279.3, tamano: 10, ancho: 428 },
+      { valor: () => "domicilio social en CALLE ORENSE NUM 20 Planta 2 Pta. 13 28020 MADRID provincia de", x: 85.1, y: 290.8, tamano: 10, ancho: 428 },
+      { valor: () => "MADRID y en su condición de empresa subcontratista de la mercantil SIEMENS, S.A.,", x: 85.1, y: 302.3, tamano: 10, ancho: 428 },
+      // "D./Dña." de abajo acaba en 121,7
+      { valor: () => "SOLEDAD FERNANDEZ MUÑOZ", x: 121.7, y: 716.4, tamano: 10, ancho: 170 },
+      // Firma y sello de la representante, bajo "(firma y sello)"
+      { imagen: (d) => d.sello, x: 106.2, y: 741.7, ancho: 134, alto: 99.6 },
+    ],
+  },
+  {
     // Declaración individual de coordinación de actividades del personal externo de Sanofi Aventis.
     // La actividad dura tres años desde hoy, y se marca siempre el centro de Oficinas Meridian.
     id: "sanofi",

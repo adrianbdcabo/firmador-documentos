@@ -502,6 +502,20 @@ describe("firmador", { skip: !hayEjemplos && "faltan los documentos de ejemplo" 
     assert.ok(await llevaImagen(pdf, datos.firma, 0), "lleva la firma");
   });
 
+  test("SIEMENS TRES CANTOS: fecha, párrafo de la representante y sello, sin datos del trabajador", async () => {
+    const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
+    const datos = { trabajador: resultado.trabajador, dni: resultado.dni, firma: resultado.firma, sello: SELLO, fecha: new Date(2026, 9, 2) };
+    const siemens = ESPECIALES.find((e) => e.id === "siemens-tres-cantos");
+    assert.equal(siemens.boton, "SIEMENS TRES CANTOS");
+    assert.equal(siemens.archivo(datos), `DOCU ESPECIAL SIEMENS TRES CANTOS - ${resultado.trabajador}.pdf`);
+    const plantilla = new Uint8Array(fs.readFileSync(new URL(`../${siemens.plantilla}`, import.meta.url)));
+    const pdf = await generar(siemens, plantilla, datos);
+    assert.equal(await paginas(pdf), 1);
+    const contenido = (await texto(pdf, 0)).replace(/\s+/g, " ");
+    for (const esperado of ["Madrid a 2 de Octubre de 2026", "Soledad Fernández Muñoz", "02260608F", "TEMPS MULTIWORK ETT SL", "B01130186", "SOLEDAD FERNANDEZ MUÑOZ"]) assert.ok(contenido.includes(esperado), `falta "${esperado}"`);
+    assert.ok(await llevaImagen(pdf, datos.sello, 0), "lleva el sello");
+  });
+
   test("MACADAMIA: el nombre y el DNI van dentro de la frase, que se vuelve a justificar", async () => {
     const resultado = await procesar(leer(DOCS["51143385X"].archivo), {});
     const datos = { trabajador: resultado.trabajador, dni: resultado.dni, fecha: new Date(2026, 8, 23) };
